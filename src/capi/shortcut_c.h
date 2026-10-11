@@ -64,6 +64,7 @@ typedef enum {
   NATIVE_SHORTCUT_EVENT_TYPE_REGISTERED = 1,
   NATIVE_SHORTCUT_EVENT_TYPE_UNREGISTERED = 2,
   NATIVE_SHORTCUT_EVENT_TYPE_REGISTRATION_FAILED = 3,
+  NATIVE_SHORTCUT_EVENT_TYPE_RELEASED = 4,
 } native_shortcut_event_type_t;
 
 /// One ShortcutEvent, tagged by its concrete type.

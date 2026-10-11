@@ -56,7 +56,8 @@ bool ParseShortcutAcceleratorTokens(const std::string& accelerator,
     std::string token = ShortcutToLower(part);
     if (token == "ctrl" || token == "control" || token == "alt" || token == "option" ||
         token == "shift" || token == "cmd" || token == "command" || token == "super" ||
-        token == "meta" || token == "cmdorctrl" || token == "commandorcontrol") {
+        token == "meta" || token == "cmdorctrl" || token == "commandorcontrol" ||
+        token == "capslock" || token == "fn") {
       modifiers.push_back(token);
     } else {
       if (!key_token.empty()) {
@@ -176,6 +177,10 @@ bool ParseMacShortcutAccelerator(const std::string& accelerator,
       modifiers |= optionKey;
     } else if (token == "shift") {
       modifiers |= shiftKey;
+    } else if (token == "capslock") {
+      modifiers |= alphaLock;
+    } else if (token == "fn") {
+      modifiers |= kEventKeyModifierFnMask;
     } else {
       // cmd / command / meta / super / cmdorctrl all mean Command on macOS.
       modifiers |= cmdKey;
@@ -295,7 +300,7 @@ class ShortcutManagerImpl final : public ShortcutManager::Impl {
       return eventNotHandledErr;
     }
 
-    self->HandleHotKey(static_cast<ShortcutId>(hotkey_id.id));
+    self->HandleHotKey(static_cast<ShortcutId>(hotkey_id.id), GetEventKind(event));
     return noErr;
   }
 
@@ -305,15 +310,16 @@ class ShortcutManagerImpl final : public ShortcutManager::Impl {
       return;
     }
 
-    EventTypeSpec event_type;
-    event_type.eventClass = kEventClassKeyboard;
-    event_type.eventKind = kEventHotKeyPressed;
+    const EventTypeSpec event_types[] = {
+        {kEventClassKeyboard, kEventHotKeyPressed},
+        {kEventClassKeyboard, kEventHotKeyReleased},
+    };
 
-    InstallEventHandler(GetApplicationEventTarget(), HotKeyHandler, 1, &event_type, this,
+    InstallEventHandler(GetApplicationEventTarget(), HotKeyHandler, 2, event_types, this,
                         &handler_);
   }
 
-  void HandleHotKey(ShortcutId shortcut_id) {
+  void HandleHotKey(ShortcutId shortcut_id, UInt32 event_kind) {
     auto shortcut = manager_->Get(shortcut_id);
     if (!shortcut) {
       return;
@@ -323,8 +329,12 @@ class ShortcutManagerImpl final : public ShortcutManager::Impl {
       return;
     }
 
-    manager_->EmitShortcutActivated(shortcut_id, shortcut->GetAccelerator());
-    shortcut->Invoke();
+    if (event_kind == kEventHotKeyReleased) {
+      manager_->EmitShortcutReleased(shortcut_id, shortcut->GetAccelerator());
+    } else if (event_kind == kEventHotKeyPressed) {
+      manager_->EmitShortcutActivated(shortcut_id, shortcut->GetAccelerator());
+      shortcut->Invoke();
+    }
   }
 
   ShortcutManager* manager_;
@@ -340,6 +350,7 @@ ShortcutManager::ShortcutManager()
     : pimpl_(std::make_unique<ShortcutManagerImpl>(this)), next_shortcut_id_(1), enabled_(true) {}
 
 ShortcutManager::~ShortcutManager() {
+  ShutdownEmitter();
   UnregisterAll();
 }
 

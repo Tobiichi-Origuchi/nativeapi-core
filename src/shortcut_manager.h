@@ -372,6 +372,11 @@ class ShortcutManager : public EventEmitter<ShortcutEvent> {
   void StopEventListening() override;
 
  private:
+  friend class ShortcutManagerImpl;
+
+  // Platform entry point; release delivery is not part of the public API.
+  void EmitShortcutReleased(ShortcutId id, const std::string& accelerator);
+
   /**
    * @brief Private constructor to enforce singleton pattern.
    *

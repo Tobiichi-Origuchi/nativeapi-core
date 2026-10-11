@@ -56,6 +56,8 @@ void TestModifierSpellings() {
 
   ExpectValid("Ctrl+Shift+Alt+Cmd+A");  // stacked
   ExpectValid("ctrl+shift+a");          // case-insensitive
+  ExpectValid("CapsLock+Shift+A");      // macOS-only modifier
+  ExpectValid("Fn+F1");                 // macOS-only modifier
   ExpectInvalid("Hyper+A");             // unknown modifier
 }
 

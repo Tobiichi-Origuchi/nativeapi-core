@@ -52,6 +52,8 @@ struct ShortcutOptions {
    * - Modifiers: Ctrl, Alt, Shift, Cmd (macOS), Super (Linux), Meta
    * - Keys: A-Z, 0-9, F1-F12, Space, Tab, Enter, Escape, etc.
    * - Examples: "Ctrl+C", "Cmd+Shift+4", "Alt+F4"
+   * - macOS also accepts CapsLock and Fn modifiers. Registration fails on
+   *   platforms that cannot represent those modifiers.
    */
   std::string accelerator;
 
@@ -562,6 +564,33 @@ class ShortcutRegistrationFailedEvent : public ShortcutEvent {
    * @brief Description of the registration failure.
    */
   std::string error_message_;
+};
+
+/**
+ * @brief Emitted when the main key of an activated shortcut is released.
+ *
+ * Releasing modifiers before the main key does not prevent delivery. This
+ * event does not invoke the shortcut's activation callback.
+ *
+ * @note Platform availability:
+ * - macOS: ✅ Delivered by Carbon without keyboard-monitoring permissions.
+ * - Windows: ❌ Not emitted; global hotkeys report activation only.
+ * - Linux: ❌ Not emitted; global hotkeys report activation only.
+ * - Android: ❌ Global shortcuts are unsupported.
+ * - iOS: ❌ Global shortcuts are unsupported.
+ * - OHOS: ❌ Global shortcuts are unsupported.
+ */
+class ShortcutReleasedEvent : public ShortcutEvent {
+ public:
+  /**
+   * @brief Creates a release event for the registered shortcut.
+   * @param shortcut_id Identifier of the released shortcut.
+   * @param accelerator Accelerator of the released shortcut.
+   */
+  explicit ShortcutReleasedEvent(ShortcutId shortcut_id, const std::string& accelerator)
+      : ShortcutEvent(shortcut_id, accelerator) {}
+
+  std::string GetTypeName() const override { return "ShortcutReleasedEvent"; }
 };
 
 }  // namespace nativeapi

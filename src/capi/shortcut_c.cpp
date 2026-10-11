@@ -232,6 +232,11 @@ bool to_c_shortcut_event(const nativeapi::ShortcutEvent& event, native_shortcut_
     out->data.registration_failed.error_message = to_c_str(typed->GetErrorMessage());
     return true;
   }
+  if (const auto* typed = dynamic_cast<const nativeapi::ShortcutReleasedEvent*>(&event)) {
+    out->type = NATIVE_SHORTCUT_EVENT_TYPE_RELEASED;
+    (void)typed;
+    return true;
+  }
   return false;
 }
 

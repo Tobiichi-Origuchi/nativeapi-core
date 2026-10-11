@@ -218,7 +218,7 @@ bool ShortcutManager::IsValidAccelerator(const std::string& accelerator) {
   // platform parser degrades to a ShortcutRegistrationFailedEvent rather than a
   // silent no-op, but the two lists are meant to agree.
   static const std::regex accelerator_regex(
-      R"(^(?:(?:Ctrl|Control|Alt|Option|Shift|Cmd|Command|Super|Meta|CmdOrCtrl|CommandOrControl)\+)*)"
+      R"(^(?:(?:Ctrl|Control|Alt|Option|Shift|Cmd|Command|Super|Meta|CmdOrCtrl|CommandOrControl|CapsLock|Fn)\+)*)"
       R"((?:F1[0-9]|F2[0-4]|F[1-9]|Num[0-9]|NumDec|NumAdd|NumSub|NumMult|NumDiv|NumEnter)"
       R"(|Space|Tab|Enter|Return|Escape|Esc|Backspace|ForwardDelete|Delete|Insert|Help)"
       R"(|Home|End|PageUp|PageDown|Up|Down|Left|Right)"
@@ -244,6 +244,10 @@ bool ShortcutManager::IsEnabled() const {
 
 void ShortcutManager::EmitShortcutActivated(ShortcutId id, const std::string& accelerator) {
   EmitAsync<ShortcutActivatedEvent>(id, accelerator);
+}
+
+void ShortcutManager::EmitShortcutReleased(ShortcutId id, const std::string& accelerator) {
+  EmitAsync<ShortcutReleasedEvent>(id, accelerator);
 }
 
 // Start event listening (called when first listener is added)

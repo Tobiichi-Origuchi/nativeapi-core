@@ -83,6 +83,10 @@ add_test(NAME window_shadow_blur_test COMMAND window_shadow_blur_test)
 
 if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   enable_language(OBJCXX)
+  add_executable(shortcut_release_macos_test shortcut_release_macos_test.mm)
+  target_link_libraries(shortcut_release_macos_test PRIVATE nativeapi "-framework Carbon" "-framework Cocoa")
+  add_test(NAME shortcut_release_macos_test COMMAND shortcut_release_macos_test)
+  set_tests_properties(shortcut_release_macos_test PROPERTIES TIMEOUT 10)
   # Optional host compatibility check against the installed Flutter framework.
   set(NATIVEAPI_FLUTTER_FRAMEWORK_DIR "" CACHE PATH "Directory containing FlutterMacOS.framework for tests")
   if(NATIVEAPI_FLUTTER_FRAMEWORK_DIR)
