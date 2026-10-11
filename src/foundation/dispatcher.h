@@ -51,7 +51,7 @@ void SetMainThread();
  * @brief Whether RunOnMainThread() can actually deliver on this platform.
  *
  * Returns false where no main-thread dispatch mechanism is wired up yet
- * (currently Android and OpenHarmony). Callers that must not silently drop work
+ * (OpenHarmony, or Android before host initialization). Callers that must not silently drop work
  * should check this first.
  */
 bool IsMainThreadDispatchSupported();

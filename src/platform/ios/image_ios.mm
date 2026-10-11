@@ -10,6 +10,18 @@ class Image::Impl {
  public:
   Impl() : ui_image_(nil), size_({0, 0}), format_("Unknown") {}
 
+  ~Impl() {
+#if !__has_feature(objc_arc)
+    [ui_image_ release];
+#endif
+  }
+  void Set(UIImage* image) {
+#if !__has_feature(objc_arc)
+    [image retain];
+    [ui_image_ release];
+#endif
+    ui_image_ = image;
+  }
   UIImage* ui_image_;
   Size size_;
   std::string format_;
@@ -20,7 +32,7 @@ Image::~Image() {}
 
 Image::Image(const Image& other) : pimpl_(std::make_unique<Impl>()) {
   if (other.pimpl_ && other.pimpl_->ui_image_) {
-    pimpl_->ui_image_ = other.pimpl_->ui_image_;
+    pimpl_->Set(other.pimpl_->ui_image_);
     pimpl_->size_ = other.pimpl_->size_;
     pimpl_->format_ = other.pimpl_->format_;
   }
@@ -34,10 +46,10 @@ std::shared_ptr<Image> Image::FromFile(const std::string& file_path) {
   UIImage* uiImage = [UIImage imageWithContentsOfFile:nsPath];
 
   if (uiImage) {
-    image->pimpl_->ui_image_ = uiImage;
+    image->pimpl_->Set(uiImage);
 
     // Get actual image size
-    CGSize size = uiImage.size;
+    CGSize size = CGSizeMake(CGImageGetWidth(uiImage.CGImage), CGImageGetHeight(uiImage.CGImage));
     image->pimpl_->size_ = {static_cast<double>(size.width), static_cast<double>(size.height)};
 
     // Determine format from file extension
@@ -71,12 +83,15 @@ std::shared_ptr<Image> Image::FromBase64(const std::string& base64_data) {
       [[NSData alloc] initWithBase64EncodedString:[NSString stringWithUTF8String:data.c_str()]
                                           options:0];
   UIImage* uiImage = [UIImage imageWithData:nsData];
+#if !__has_feature(objc_arc)
+  [nsData release];
+#endif
 
   if (uiImage) {
-    image->pimpl_->ui_image_ = uiImage;
+    image->pimpl_->Set(uiImage);
 
     // Get actual image size
-    CGSize size = uiImage.size;
+    CGSize size = CGSizeMake(CGImageGetWidth(uiImage.CGImage), CGImageGetHeight(uiImage.CGImage));
     image->pimpl_->size_ = {static_cast<double>(size.width), static_cast<double>(size.height)};
 
     // Default assumption for base64 images
@@ -103,7 +118,8 @@ std::string Image::ToBase64() const {
 
   NSData* pngData = UIImagePNGRepresentation(pimpl_->ui_image_);
   NSString* base64String = [pngData base64EncodedStringWithOptions:0];
-  return std::string("data:image/png;base64,") + [base64String UTF8String];
+  const char* bytes = base64String.UTF8String;
+  return bytes ? std::string("data:image/png;base64,") + bytes : "";
 }
 
 bool Image::SaveToFile(const std::string& file_path) const {

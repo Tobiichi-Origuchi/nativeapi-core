@@ -440,3 +440,29 @@ if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
   target_compile_options(clipboard_macos_test PRIVATE -fobjc-arc)
   target_link_libraries(clipboard_macos_test PRIVATE nativeapi "-framework Cocoa")
 endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+  # UIKit host; run explicitly in a simulator, never in headless CTest.
+  add_executable(clipboard_ios_test MACOSX_BUNDLE clipboard_ios_test.mm)
+  target_compile_options(clipboard_ios_test PRIVATE -fobjc-arc)
+  target_link_libraries(clipboard_ios_test PRIVATE nativeapi)
+  set_target_properties(clipboard_ios_test PROPERTIES
+    MACOSX_BUNDLE_GUI_IDENTIFIER dev.nativeapi.clipboard-test
+    MACOSX_BUNDLE_BUNDLE_NAME clipboard_ios_test
+    MACOSX_BUNDLE_BUNDLE_VERSION 1)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  # Explicit private Xvfb integration; changes that display's clipboard.
+  add_executable(clipboard_linux_test clipboard_linux_test.cpp)
+  target_link_libraries(clipboard_linux_test PRIVATE nativeapi)
+endif()
+
+if(ANDROID)
+  # C++ NativeActivity hosts; package/run explicitly in an emulator, not CTest.
+  add_library(clipboard_android_test SHARED clipboard_android_test.cpp)
+  target_link_libraries(clipboard_android_test PRIVATE nativeapi)
+  add_library(clipboard_android_writer SHARED clipboard_android_test.cpp)
+  target_compile_definitions(clipboard_android_writer PRIVATE NATIVEAPI_CLIPBOARD_WRITER=1)
+  target_link_libraries(clipboard_android_writer PRIVATE nativeapi)
+endif()

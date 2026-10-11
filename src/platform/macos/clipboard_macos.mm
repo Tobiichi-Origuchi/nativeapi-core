@@ -139,7 +139,7 @@ bool Clipboard::Impl::Start() {
   platform->revision = [NSPasteboard generalPasteboard].changeCount;
   auto* state = platform.get();
   platform->timer = RetainIfManual([NSTimer
-      timerWithTimeInterval:0.25
+      timerWithTimeInterval:0.1
                     repeats:YES
                       block:^(NSTimer*) {
                         const NSInteger revision = [NSPasteboard generalPasteboard].changeCount;

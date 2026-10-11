@@ -40,7 +40,8 @@ class ClipboardChangedEvent : public ClipboardEvent {
 /**
  * @brief Accesses the system copy/paste clipboard (not the X11 PRIMARY selection).
  *
- * Desktop calls and listener registration are UI-thread only. Reads complete exactly
+ * Desktop calls and listener registration are UI-thread only; mobile backends marshal
+ * calls to the host UI thread. Reads complete exactly
  * once, on a later UI-loop turn, and require a running host event loop. A callback's
  * first argument is false on access, conversion or concurrent-change failure; its
  * second argument is then default-initialized. Missing formats are successful reads.
@@ -49,11 +50,14 @@ class ClipboardChangedEvent : public ClipboardEvent {
  * Native commit failures may leave the clipboard empty or partially updated.
  *
  * @note Platform availability:
- * - macOS: ✅ Fully supported - NSPasteboard; changeCount sampled every 250 ms
+ * - macOS: ✅ Fully supported - NSPasteboard; changeCount sampled every 100 ms
  * - Windows: ✅ Fully supported - Win32 clipboard and WM_CLIPBOARDUPDATE
  * - Linux: ⚠️ GTK 3 - Access follows compositor policy; persistence is best effort
- * - Android: ❌ Not supported - Reads immediately complete with false; writes fail
- * - iOS: ❌ Not supported - Reads immediately complete with false; writes fail
+ * - Android: ⚠️ NativeActivity host initialization required - C++/JNI ClipboardManager;
+ *   focused metadata polling every 100 ms, including focus restoration; text/HTML writes
+ *   need explicit text, clear requires Android 9+; image/file publication is unsupported
+ * - iOS: ⚠️ Foreground only - UIPasteboard notifications and resume checks; reads
+ *   follow system paste permission, file URLs remain subject to app sandbox access
  * - OpenHarmony: ❌ Not supported - Reads immediately complete with false; writes fail
  *
  * @code
@@ -104,7 +108,8 @@ class Clipboard : public EventEmitter<ClipboardEvent> {
   bool Write(const ClipboardData& data);
   /** @brief Writes only plain text. @param text UTF-8 text. @return false on failure. */
   bool WriteText(const std::string& text);
-  /** @brief Writes only HTML. @param html UTF-8 fragment. @return false on failure. */
+  /** @brief Writes only HTML. Android requires Write with an explicit plain-text fallback.
+   * @param html UTF-8 fragment. @return false on failure or unsupported HTML-only writes. */
   bool WriteHtml(const std::string& html);
   /** @brief Writes only an image. @param image Image, or nullptr to clear. @return false on
    * failure. */
