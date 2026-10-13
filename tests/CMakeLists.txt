@@ -456,6 +456,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   # Explicit private Xvfb integration; changes that display's clipboard.
   add_executable(clipboard_linux_test clipboard_linux_test.cpp)
   target_link_libraries(clipboard_linux_test PRIVATE nativeapi)
+  # Explicit private Xvfb integration; drives the in-process GTK chooser.
+  add_executable(file_dialog_linux_test file_dialog_linux_test.cpp)
+  target_link_libraries(file_dialog_linux_test PRIVATE nativeapi)
 endif()
 
 if(ANDROID)

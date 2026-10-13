@@ -9,6 +9,7 @@ enum class FileDialogMode { OpenFile, OpenFiles, SaveFile, SelectFolder };
 enum class FileDialogResult { None, Accepted, Cancelled, Failed };
 /** System file picker. UI-thread only; Open pumps messages until dismissed.
  * Windows: WinRT picker with WinUI3 enabled, IFileDialog otherwise.
+ * Linux: GtkFileChooserNative (xdg-desktop-portal when GTK selects it), local files only.
  * Other platforms currently return IsSupported() == false.
  */
 class FileDialog : public Dialog {
