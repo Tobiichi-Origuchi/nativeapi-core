@@ -427,4 +427,30 @@ HICON ImageToHICON(const Image* image, int width, int height) {
   return hIcon;
 }
 
+// Render a separate bitmap: shared Image objects keep their original pixels.
+HICON ImageToTemplateHICON(const Image* image, int width, int height, COLORREF foreground) {
+  auto* bitmap = image ? static_cast<Gdiplus::Bitmap*>(image->GetNativeObject()) : nullptr;
+  if (!bitmap)
+    return nullptr;
+  Gdiplus::Bitmap rendered(width, height, PixelFormat32bppARGB);
+  Gdiplus::Graphics graphics(&rendered);
+  graphics.Clear(Gdiplus::Color(0, 0, 0, 0));
+  graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+  Gdiplus::ColorMatrix matrix = {{
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 0, 0},
+      {0, 0, 0, 1, 0},
+      {GetRValue(foreground) / 255.0f, GetGValue(foreground) / 255.0f,
+       GetBValue(foreground) / 255.0f, 0, 1},
+  }};
+  Gdiplus::ImageAttributes attributes;
+  attributes.SetColorMatrix(&matrix);
+  graphics.DrawImage(bitmap, Gdiplus::Rect(0, 0, width, height), 0, 0, bitmap->GetWidth(),
+                     bitmap->GetHeight(), Gdiplus::UnitPixel, &attributes);
+  HICON icon = nullptr;
+  rendered.GetHICON(&icon);
+  return icon;
+}
+
 }  // namespace nativeapi

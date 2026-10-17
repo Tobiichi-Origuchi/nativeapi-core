@@ -307,9 +307,10 @@ class TrayIcon : public EventEmitter<TrayIconEvent>, public NativeObjectProvider
    * @brief Sets whether the icon is drawn as a template image.
    *
    * A template image contributes only its alpha channel; the system paints it
-   * in whatever colour suits the menu bar (dark on a light bar, light on a dark
-   * one, highlighted while the menu is open). Turn it on for monochrome glyphs,
-   * leave it off for icons that carry their own colours. Off by default.
+   * in the system tray's foreground colour, following appearance changes.
+   * macOS also handles highlighting while the menu is open. Turn it on for
+   * monochrome glyphs, leave it off for icons that carry their own colours.
+   * Off by default.
    *
    * Takes effect immediately, also for an icon that is already set. The Image
    * passed to SetIcon() is never modified.
@@ -318,8 +319,9 @@ class TrayIcon : public EventEmitter<TrayIconEvent>, public NativeObjectProvider
    *
    * @note Platform availability:
    * - macOS: ✅ Fully supported - Maps to NSImage.template
-   * - Windows: ⚠️ Recorded only - The icon is always drawn with its own colours
-   * - Linux: ⚠️ Recorded only - The icon is always drawn with its own colours
+   * - Windows: ✅ Uses the taskbar light/dark setting or high-contrast text colour
+   * - Linux: ⚠️ Uses the desktop portal colour scheme, GTK fallback, or Omarchy foreground;
+   *   independently themed panels may differ
    * - Android: ❌ Not applicable - Always ignored
    * - iOS: ❌ Not applicable - Always ignored
    * - OpenHarmony: ❌ Not applicable - Always ignored

@@ -25,8 +25,24 @@ namespace nativeapi {
 // Forward declaration for Windows-specific helper function from
 // image_windows.cpp
 HICON ImageToHICON(const Image* image, int width, int height);
+HICON ImageToTemplateHICON(const Image* image, int width, int height, COLORREF foreground);
 
 namespace {
+
+COLORREF TrayForeground() {
+  HIGHCONTRASTW contrast = {};
+  contrast.cbSize = sizeof(contrast);
+  if (SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast, 0) &&
+      (contrast.dwFlags & HCF_HIGHCONTRASTON)) {
+    return GetSysColor(COLOR_WINDOWTEXT);
+  }
+  DWORD light = 1;
+  DWORD size = sizeof(light);
+  RegGetValueW(HKEY_CURRENT_USER,
+               L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+               L"SystemUsesLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
+  return light ? RGB(0, 0, 0) : RGB(255, 255, 255);
+}
 
 // Tells tray icons when the taskbar has been created again. Explorer forgets
 // every notification icon when it restarts and announces the new taskbar by
@@ -41,7 +57,7 @@ class TaskbarRestartWatcher {
     return instance;
   }
 
-  int Add(std::function<void()> on_taskbar_created) {
+  int Add(std::function<void(bool)> on_taskbar_created) {
     EnsureWindow();
     int id = next_id_++;
     callbacks_[id] = std::move(on_taskbar_created);
@@ -78,12 +94,15 @@ class TaskbarRestartWatcher {
 
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
     TaskbarRestartWatcher& self = GetInstance();
-    if (self.taskbar_created_message_ != 0 && message == self.taskbar_created_message_) {
+    const bool restarted =
+        self.taskbar_created_message_ != 0 && message == self.taskbar_created_message_;
+    if (restarted || message == WM_SETTINGCHANGE || message == WM_THEMECHANGED ||
+        message == WM_SYSCOLORCHANGE) {
       // Copy: a callback may add or remove tray icons.
       auto callbacks = self.callbacks_;
       for (auto& entry : callbacks) {
         if (self.callbacks_.count(entry.first)) {
-          entry.second();
+          entry.second(restarted);
         }
       }
       return 0;
@@ -94,7 +113,7 @@ class TaskbarRestartWatcher {
   HWND hwnd_ = nullptr;
   UINT taskbar_created_message_ = 0;
   int next_id_ = 1;
-  std::unordered_map<int, std::function<void()>> callbacks_;
+  std::unordered_map<int, std::function<void(bool)>> callbacks_;
 };
 
 }  // namespace
@@ -144,8 +163,12 @@ class TrayIcon::Impl {
     nid_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     nid_.uCallbackMessage = WM_USER + 1;  // Custom message for tray icon events
 
-    taskbar_watch_id_ =
-        TaskbarRestartWatcher::GetInstance().Add([this]() { RestoreAfterTaskbarRestart(); });
+    taskbar_watch_id_ = TaskbarRestartWatcher::GetInstance().Add([this](bool restarted) {
+      if (icon_template_)
+        UpdateIcon();
+      if (restarted)
+        RestoreAfterTaskbarRestart();
+    });
 
     // Event monitoring will be set up when first listener is added
     // via StartEventListening() override
@@ -176,6 +199,29 @@ class TrayIcon::Impl {
     if (hwnd_ && visible_) {
       Shell_NotifyIconW(NIM_ADD, &nid_);
     }
+  }
+
+  void UpdateIcon() {
+    if (!hwnd_)
+      return;
+    HICON icon = nullptr;
+    if (image_) {
+      const int width = GetSystemMetrics(SM_CXSMICON);
+      const int height = GetSystemMetrics(SM_CYSMICON);
+      icon = icon_template_ ? ImageToTemplateHICON(image_.get(), width, height, TrayForeground())
+                            : ImageToHICON(image_.get(), width, height);
+    }
+    if (!icon)
+      icon = CopyIcon(LoadIcon(nullptr, IDI_APPLICATION));
+    if (!icon)
+      return;
+    HICON previous = icon_handle_;
+    icon_handle_ = icon;
+    nid_.hIcon = icon;
+    if (visible_)
+      Shell_NotifyIconW(NIM_MODIFY, &nid_);
+    if (previous)
+      DestroyIcon(previous);
   }
 
   // Handle window procedure delegate
@@ -337,48 +383,8 @@ std::string TrayIcon::GetIdentifier() const {
 }
 
 void TrayIcon::SetIcon(std::shared_ptr<Image> image) {
-  if (!pimpl_->hwnd_) {
-    return;
-  }
-
-  // Store the image reference
-  pimpl_->image_ = image;
-
-  HICON hIcon = nullptr;
-
-  if (image) {
-    // Get system tray icon size (following Windows guidelines)
-    int iconWidth = GetSystemMetrics(SM_CXSMICON);
-    int iconHeight = GetSystemMetrics(SM_CYSMICON);
-
-    // Use the helper function to convert Image to HICON
-    // This handles file paths efficiently (like tray_manager_plugin.cpp)
-    // and falls back to bitmap conversion when needed
-    hIcon = ImageToHICON(image.get(), iconWidth, iconHeight);
-
-    // Fallback to default icon if conversion failed
-    if (!hIcon) {
-      hIcon = LoadIcon(nullptr, IDI_APPLICATION);
-    }
-  } else {
-    // Use default application icon when no image is provided
-    hIcon = LoadIcon(nullptr, IDI_APPLICATION);
-  }
-
-  if (hIcon) {
-    // Clean up previous icon
-    if (pimpl_->icon_handle_) {
-      DestroyIcon(pimpl_->icon_handle_);
-    }
-
-    pimpl_->icon_handle_ = hIcon;
-    pimpl_->nid_.hIcon = hIcon;
-
-    // Update the icon if it's currently visible
-    if (IsVisible()) {
-      Shell_NotifyIconW(NIM_MODIFY, &pimpl_->nid_);
-    }
-  }
+  pimpl_->image_ = std::move(image);
+  pimpl_->UpdateIcon();
 }
 
 std::shared_ptr<Image> TrayIcon::GetIcon() const {
@@ -386,8 +392,8 @@ std::shared_ptr<Image> TrayIcon::GetIcon() const {
 }
 
 void TrayIcon::SetIconTemplate(bool is_icon_template) {
-  // Recorded only: the notification area always draws the icon's own colours.
   pimpl_->icon_template_ = is_icon_template;
+  pimpl_->UpdateIcon();
 }
 
 bool TrayIcon::IsIconTemplate() const {

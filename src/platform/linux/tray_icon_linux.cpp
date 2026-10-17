@@ -15,6 +15,7 @@
 #include <iostream>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -208,7 +209,7 @@ static const char kDbusMenuIntrospectionXml[] =
 // Returns a GVariant of type a(iiay) containing one entry for the supplied
 // pixbuf (or an empty array when pixbuf is nullptr).  Each pixel is encoded as
 // four bytes in network byte order: Alpha, Red, Green, Blue (ARGB32).
-static GVariant* PixbufToSniIconPixmaps(GdkPixbuf* pixbuf) {
+static GVariant* PixbufToSniIconPixmaps(GdkPixbuf* pixbuf, const GdkRGBA* foreground = nullptr) {
   GVariantBuilder array_builder;
   g_variant_builder_init(&array_builder, G_VARIANT_TYPE("a(iiay)"));
 
@@ -226,9 +227,9 @@ static GVariant* PixbufToSniIconPixmaps(GdkPixbuf* pixbuf) {
     for (int row = 0; row < height; ++row) {
       const guchar* p = pixels + row * rowstride;
       for (int col = 0; col < width; ++col) {
-        const uint8_t r = p[0];
-        const uint8_t g = p[1];
-        const uint8_t b = p[2];
+        const uint8_t r = foreground ? static_cast<uint8_t>(foreground->red * 255 + 0.5) : p[0];
+        const uint8_t g = foreground ? static_cast<uint8_t>(foreground->green * 255 + 0.5) : p[1];
+        const uint8_t b = foreground ? static_cast<uint8_t>(foreground->blue * 255 + 0.5) : p[2];
         const uint8_t a = has_alpha ? p[3] : 255u;
         argb.push_back(a);
         argb.push_back(r);
@@ -261,6 +262,10 @@ class TrayIcon::Impl {
 
   std::shared_ptr<Image> image_;
   bool icon_template_ = false;
+  GdkRGBA foreground_{1, 1, 1, 1};
+  guint appearance_timer_ = 0;
+  guint appearance_subscription_ = 0;
+  guint32 color_scheme_ = 0;
   Size icon_size_ = Size{18, 18};
   TrayIconPosition icon_position_ = TrayIconPosition::Left;
   std::shared_ptr<View> content_view_;
@@ -304,6 +309,138 @@ class TrayIcon::Impl {
   ~Impl() {
     Cleanup();
     ReleaseIdentifier(identifier_);
+  }
+
+  GdkRGBA ReadForeground() const {
+    // Omarchy's bar uses this palette rather than GTK's application theme.
+    const char* override_dir = g_getenv("OMARCHY_STATE_DIR");
+    const char* state_dir = g_getenv("XDG_STATE_HOME");
+    const std::string state =
+        state_dir ? state_dir : std::string(g_get_home_dir()) + "/.local/state";
+    const std::string palette = override_dir ? std::string(override_dir) + "/theme/colors.toml"
+                                             : state + "/omarchy/current/theme/colors.toml";
+    gchar* contents = nullptr;
+    if (g_file_get_contents(palette.c_str(), &contents, nullptr, nullptr)) {
+      std::istringstream lines(contents);
+      g_free(contents);
+      std::unordered_map<std::string, std::string> colors;
+      std::string line;
+      while (std::getline(lines, line)) {
+        const auto equal = line.find('=');
+        if (equal == std::string::npos)
+          continue;
+        std::string key = line.substr(0, equal);
+        key.erase(0, key.find_first_not_of(" \t"));
+        key.erase(key.find_last_not_of(" \t") + 1);
+        const auto quote = line.find_first_of("\"'", equal + 1);
+        if (quote == std::string::npos)
+          continue;
+        const auto end = line.find(line[quote], quote + 1);
+        if (end != std::string::npos)
+          colors[key] = line.substr(quote + 1, end - quote - 1);
+      }
+      for (const char* key : {"foreground", "fg", "color7"}) {
+        GdkRGBA color;
+        if (gdk_rgba_parse(&color, colors[key].c_str()))
+          return color;
+      }
+    }
+    if (color_scheme_ == 1)
+      return GdkRGBA{1, 1, 1, 1};
+    if (color_scheme_ == 2)
+      return GdkRGBA{0, 0, 0, 1};
+    // No portal preference: use a fresh context without application CSS.
+    if (gdk_screen_get_default()) {
+      GtkWidgetPath* path = gtk_widget_path_new();
+      gtk_widget_path_append_type(path, GTK_TYPE_WINDOW);
+      GtkStyleContext* context = gtk_style_context_new();
+      gtk_style_context_set_path(context, path);
+      GdkRGBA color{1, 1, 1, 1};
+      gtk_style_context_get_color(context, GTK_STATE_FLAG_NORMAL, &color);
+      g_object_unref(context);
+      gtk_widget_path_unref(path);
+      return color;
+    }
+    return GdkRGBA{1, 1, 1, 1};
+  }
+
+  void RefreshAppearance() {
+    if (!icon_template_)
+      return;
+    const auto color = ReadForeground();
+    if (gdk_rgba_equal(&color, &foreground_))
+      return;
+    foreground_ = color;
+    EmitSignal("NewIcon");
+  }
+
+  void SetColorScheme(GVariant* value) {
+    // Some older portals wrap the Read result in another variant.
+    GVariant* unwrapped = g_variant_ref(value);
+    while (g_variant_is_of_type(unwrapped, G_VARIANT_TYPE_VARIANT)) {
+      GVariant* next = g_variant_get_variant(unwrapped);
+      g_variant_unref(unwrapped);
+      unwrapped = next;
+    }
+    if (g_variant_is_of_type(unwrapped, G_VARIANT_TYPE_UINT32)) {
+      color_scheme_ = g_variant_get_uint32(unwrapped);
+    }
+    g_variant_unref(unwrapped);
+    RefreshAppearance();
+  }
+
+  void WatchAppearance() {
+    if (appearance_timer_)
+      return;
+    if (connection_) {
+      appearance_subscription_ = g_dbus_connection_signal_subscribe(
+          connection_, "org.freedesktop.portal.Desktop", "org.freedesktop.portal.Settings",
+          "SettingChanged", "/org/freedesktop/portal/desktop", nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+          [](GDBusConnection*, const gchar*, const gchar*, const gchar*, const gchar*,
+             GVariant* parameters, gpointer data) {
+            const gchar* ns;
+            const gchar* key;
+            GVariant* value;
+            g_variant_get(parameters, "(&s&sv)", &ns, &key, &value);
+            if (g_strcmp0(ns, "org.freedesktop.appearance") == 0 &&
+                g_strcmp0(key, "color-scheme") == 0) {
+              static_cast<Impl*>(data)->SetColorScheme(value);
+            }
+            g_variant_unref(value);
+          },
+          this, nullptr);
+      GVariant* result = g_dbus_connection_call_sync(
+          connection_, "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+          "org.freedesktop.portal.Settings", "Read",
+          g_variant_new("(ss)", "org.freedesktop.appearance", "color-scheme"),
+          G_VARIANT_TYPE("(v)"), G_DBUS_CALL_FLAGS_NONE, 250, nullptr, nullptr);
+      if (result) {
+        GVariant* value = g_variant_get_child_value(result, 0);
+        SetColorScheme(value);
+        g_variant_unref(value);
+        g_variant_unref(result);
+      }
+    }
+    foreground_ = ReadForeground();
+    // Resolve atomically replaced Omarchy palette files and GTK changes even
+    // on desktops which don't provide a settings portal. Only template icons poll.
+    appearance_timer_ = g_timeout_add_seconds(
+        1,
+        [](gpointer data) -> gboolean {
+          static_cast<Impl*>(data)->RefreshAppearance();
+          return G_SOURCE_CONTINUE;
+        },
+        this);
+  }
+
+  void StopWatchingAppearance() {
+    if (appearance_timer_)
+      g_source_remove(appearance_timer_);
+    appearance_timer_ = 0;
+    if (connection_ && appearance_subscription_) {
+      g_dbus_connection_signal_unsubscribe(connection_, appearance_subscription_);
+    }
+    appearance_subscription_ = 0;
   }
 
   // Connect to the session bus, register the SNI object, and request a
@@ -417,6 +554,7 @@ class TrayIcon::Impl {
   }
 
   void Cleanup() {
+    StopWatchingAppearance();
     // Nullify the back-pointer first so any in-flight GLib callbacks that
     // haven't been dispatched yet will see a null owner and skip event emission.
     owner_ = nullptr;
@@ -657,7 +795,7 @@ class TrayIcon::Impl {
       // image_linux.cpp's GetNativeObjectInternal() returns GdkPixbuf* on Linux.
       GdkPixbuf* pb =
           self->image_ ? static_cast<GdkPixbuf*>(self->image_->GetNativeObject()) : nullptr;
-      return PixbufToSniIconPixmaps(pb);
+      return PixbufToSniIconPixmaps(pb, self->icon_template_ ? &self->foreground_ : nullptr);
     }
 
     if (g_strcmp0(property_name, "OverlayIconName") == 0) return g_variant_new_string("");
@@ -1075,8 +1213,13 @@ std::shared_ptr<Image> TrayIcon::GetIcon() const {
 }
 
 void TrayIcon::SetIconTemplate(bool is_icon_template) {
-  // Recorded only: the panel always draws the icon's own colours.
   pimpl_->icon_template_ = is_icon_template;
+  if (is_icon_template) {
+    pimpl_->WatchAppearance();
+  } else {
+    pimpl_->StopWatchingAppearance();
+  }
+  pimpl_->EmitSignal("NewIcon");
 }
 
 bool TrayIcon::IsIconTemplate() const {
