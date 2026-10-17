@@ -48,7 +48,8 @@ struct Color {
    * - "#RRGGBBAA" - 8-digit hex with alpha
    *
    * @param hex Hexadecimal color string (with or without '#' prefix)
-   * @return Color instance parsed from the hex string
+   * @return Color instance parsed from the hex string, or Transparent for null,
+   *         malformed length or non-hexadecimal characters. This method never throws.
    *
    * @example
    * // Create a red color

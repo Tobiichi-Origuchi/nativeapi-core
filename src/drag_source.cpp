@@ -4,7 +4,9 @@ namespace nativeapi {
 
 DragSource::DragSource() : pimpl_(std::make_unique<Impl>(this)) {}
 
-DragSource::~DragSource() = default;
+DragSource::~DragSource() {
+  ShutdownEmitter();
+}
 
 void DragSource::SetFilePaths(const std::vector<std::string>& file_paths) {
   pimpl_->file_paths = file_paths;

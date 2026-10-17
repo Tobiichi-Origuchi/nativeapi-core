@@ -30,6 +30,21 @@ typedef IdAllocator::IdType ShortcutId;
  * - Automatic cleanup of resources on destruction
  * - Support for both global and application-local shortcuts
  *
+ * @note Platform availability:
+ * - macOS: ✅ Carbon global hotkeys, including activation/release events.
+ * - Windows: ✅ Win32 global hotkeys; activation events only.
+ * - Linux: ⚠️ X11 hotkeys when an X display is available.
+ * - Android: ❌ Native shortcut registration is not implemented.
+ * - iOS: ❌ Native shortcut registration is not implemented.
+ * - OpenHarmony: ⚠️ API 14+ public NDK global hotkeys, with Ctrl/Alt/Shift
+ *   modifiers and an active main dispatcher. Meta/Fn/lock modifiers, release
+ *   events are not implemented. Application scope uses a mounted companion
+ *   NativeShortcutHost forwarding normal component key events, without reserving
+ *   global hotkeys. It requires an initialized UI host and at least one attached
+ *   key host; only the focused host receives unconsumed input. Global SDK conflicts
+ *   fail registration. IsAvailable checks global availability by briefly probing
+ *   native reservations; a competing application may still race a later Register call.
+ *
  * @note This class is thread-safe for singleton access and shortcut operations.
  * @note Shortcut instances should be created and managed through this manager.
  */
@@ -348,6 +363,9 @@ class ShortcutManager : public EventEmitter<ShortcutEvent> {
    public:
     virtual ~Impl() = default;
     virtual bool IsSupported() = 0;
+    // Legacy backends retain their registry-only preflight. OHOS additionally
+    // checks canonical aliases and probes actual SDK reservations.
+    virtual bool CanRegister(const std::string& /*accelerator*/) { return true; }
     virtual bool RegisterShortcut(const std::shared_ptr<Shortcut>& shortcut) = 0;
     virtual bool UnregisterShortcut(const std::shared_ptr<Shortcut>& shortcut) = 0;
     virtual void SetupEventMonitoring() = 0;

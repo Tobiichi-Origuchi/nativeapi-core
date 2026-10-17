@@ -8,6 +8,7 @@ DropTarget::DropTarget(std::shared_ptr<Window> window)
     : pimpl_(std::make_unique<Impl>(this, std::move(window))) {}
 
 DropTarget::~DropTarget() {
+  ShutdownEmitter();
   if (pimpl_->registered) {
     pimpl_->Unregister();
     pimpl_->registered = false;
@@ -50,16 +51,15 @@ unsigned DropTarget::Impl::OperationBit(DragOperation operation) {
   return operation == DragOperation::None ? 0u : 1u << static_cast<unsigned>(operation);
 }
 
-DragOperation DropTarget::Impl::Entered(Point position,
-                                        unsigned source_operations,
-                                        bool has_data) {
+DragOperation DropTarget::Impl::Entered(Point position, unsigned source_operations, bool has_data) {
   accepted = has_data && (source_operations & OperationBit(operation)) != 0;
   if (!accepted) {
     return DragOperation::None;
   }
   last_position = position;
+  const auto result = operation;
   owner->Emit(DropTargetEnteredEvent(window_id, position));
-  return operation;
+  return result;
 }
 
 DragOperation DropTarget::Impl::Moved(Point position, unsigned source_operations) {
@@ -70,13 +70,14 @@ DragOperation DropTarget::Impl::Moved(Point position, unsigned source_operations
   if ((source_operations & OperationBit(operation)) == 0) {
     return DragOperation::None;
   }
+  const auto result = operation;
   const bool moved = std::fabs(position.x - last_position.x) >= 0.5 ||
                      std::fabs(position.y - last_position.y) >= 0.5;
   if (moved) {
     last_position = position;
     owner->Emit(DropTargetMovedEvent(window_id, position));
   }
-  return operation;
+  return result;
 }
 
 void DropTarget::Impl::Exited(Point position) {

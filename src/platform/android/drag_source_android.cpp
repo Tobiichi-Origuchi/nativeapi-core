@@ -2,6 +2,10 @@
 
 namespace nativeapi {
 
+bool DragSource::IsOperationSelectionSupported() { return false; }
+
+bool DragSource::IsPositionSupported() { return false; }
+
 // There is no shared screen to drag data across on this platform.
 struct DragSource::Impl::Platform {};
 

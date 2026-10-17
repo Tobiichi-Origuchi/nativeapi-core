@@ -139,13 +139,26 @@ class DropTargetDroppedEvent : public DropTargetEvent {
  *   if another component already registered the same window.
  * - Linux: the GTK window is made a drag destination; child widgets that are
  *   drag destinations themselves take precedence.
- * - Android, iOS and OpenHarmony: IsSupported() returns false and no events
- *   are emitted.
+ * - OpenHarmony: public native ArkUI events accept Copy drops on a mounted
+ *   NativeAPI content root (ContentSlot); children with their own destination
+ *   handlers take precedence. Create the listener after mounting the root.
+ *   Arbitrary ArkTS-only/Flutter content is not automatically wrapped. Move and
+ *   Link are refused. Files require a locally readable SDK-granted URI.
+ * - Android and iOS: IsSupported() returns false and no events are emitted.
  */
 class DropTarget : public EventEmitter<DropTargetEvent> {
  public:
   /**
    * @brief Checks if windows can accept drops on this platform.
+   *
+   * @note Platform availability:
+   * - macOS: ✅ Fully supported - AppKit content-view drop destination
+   * - Windows: ✅ Fully supported - OLE window drop destination
+   * - Linux: ✅ Fully supported - GTK window drop destination
+   * - Android: ❌ Not applicable - Returns false
+   * - iOS: ❌ Not applicable - Returns false
+   * - OpenHarmony: ⚠️ Partial support - Initialized ArkUI host; registration
+   *   additionally requires a mounted NativeAPI content root; Copy only
    */
   static bool IsSupported();
 
@@ -175,6 +188,15 @@ class DropTarget : public EventEmitter<DropTargetEvent> {
    * @param operation The operation to accept; defaults to DragOperation::Copy.
    *        A drag is only accepted when its source offers this operation.
    *        DragOperation::None refuses every drag.
+   *
+   * @note Platform availability:
+   * - macOS: ✅ Fully supported - Copy, Move and Link
+   * - Windows: ✅ Fully supported - Copy, Move and Link
+   * - Linux: ✅ Fully supported - Copy, Move and Link
+   * - Android: ❌ Not applicable - Destination never activates
+   * - iOS: ❌ Not applicable - Destination never activates
+   * - OpenHarmony: ⚠️ Partial support - Only Copy accepts drops; None, Move and
+   *   Link retain their requested value but refuse all incoming drags
    */
   void SetDropOperation(DragOperation operation);
 

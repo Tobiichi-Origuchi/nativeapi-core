@@ -26,6 +26,16 @@ namespace nativeapi {
  * same std::shared_ptr on every query, so a display's DisplayId stays stable
  * for as long as it remains connected.
  *
+ * @note Platform availability (display event monitoring):
+ * - macOS: ⚠️ Display addition/removal notifications
+ * - Windows: ❌ Native display event monitoring is not implemented
+ * - Linux: ❌ Native display event monitoring is not implemented
+ * - Android: ❌ Native display event monitoring is not implemented
+ * - iOS: ❌ Native display event monitoring is not implemented
+ * - OpenHarmony: ✅ Addition/removal, configuration and work-area notifications
+ *   through public SDK listeners while subscribed. Delivery requires an active
+ *   main-thread dispatcher. Removing the last subscriber invalidates queued work.
+ *
  * Thread Safety: This class is not thread-safe. External synchronization
  * is required if accessed from multiple threads.
  *
@@ -80,6 +90,16 @@ class DisplayManager : public EventEmitter<DisplayEvent> {
    *
    * @return Point containing the current cursor coordinates (x, y)
    * @note The position is captured at the time of the function call
+   * @note Platform availability:
+   * - macOS: ✅ Live logical desktop coordinates
+   * - Windows: ✅ Live logical desktop coordinates
+   * - Linux: ✅ Live desktop coordinates from the active GDK pointer
+   * - Android: ❌ Returns (0, 0)
+   * - iOS: ❌ Returns (0, 0)
+   * - OpenHarmony: ⚠️ Requires a pointer and SDK query authorization (normally
+   *   a focused application). Returns logical coordinates, or (0, 0) on SDK
+   *   refusal, unavailable display geometry or no pointer. Secondary-display
+   *   desktop origins require API 26; older releases support the primary only.
    */
   Point GetCursorPosition();
 
@@ -93,8 +113,8 @@ class DisplayManager : public EventEmitter<DisplayEvent> {
   /**
    * @brief Private constructor to enforce singleton pattern.
    *
-   * Initializes the DisplayManager instance and sets up platform display
-   * change monitoring.
+   * Initializes the DisplayManager instance. Native monitoring may be started
+   * lazily when its first listener is installed.
    */
   DisplayManager();
 
@@ -120,7 +140,11 @@ class DisplayManager : public EventEmitter<DisplayEvent> {
    * Enumerate the platform's current displays. Implemented per platform;
    * everything else (instance caching, diffing, events) is shared code.
    */
-  std::vector<NativeDisplayInfo> EnumerateNativeDisplays();
+  // false denotes an SDK failure; never reconcile that as an empty topology.
+  bool EnumerateNativeDisplays(std::vector<NativeDisplayInfo>& natives);
+
+  void StartEventListening() override;
+  void StopEventListening() override;
 
   /**
    * Reconcile the instance cache against a platform enumeration.

@@ -18,6 +18,10 @@
 #include "string_utils_windows.h"
 
 namespace nativeapi {
+
+bool DragSource::IsOperationSelectionSupported() { return true; }
+
+bool DragSource::IsPositionSupported() { return true; }
 namespace {
 
 class DropSourceCom : public IDropSource {

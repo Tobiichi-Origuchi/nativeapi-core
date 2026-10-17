@@ -19,11 +19,11 @@ DisplayManager::~DisplayManager() {
   // Destructor implementation
 }
 
-std::vector<DisplayManager::NativeDisplayInfo> DisplayManager::EnumerateNativeDisplays() {
-  std::vector<NativeDisplayInfo> natives;
+bool DisplayManager::EnumerateNativeDisplays(std::vector<NativeDisplayInfo>& natives) {
+  natives.clear();
   GdkDisplay* display = gdk_display_get_default();
   if (!display) {
-    return natives;
+    return false;
   }
 
   GdkMonitor* primary = gdk_display_get_primary_monitor(display);
@@ -39,7 +39,7 @@ std::vector<DisplayManager::NativeDisplayInfo> DisplayManager::EnumerateNativeDi
     natives.push_back(
         {std::to_string(reinterpret_cast<uintptr_t>(monitor)), monitor, is_primary});
   }
-  return natives;
+  return true;
 }
 
 Point DisplayManager::GetCursorPosition() {
@@ -55,5 +55,8 @@ Point DisplayManager::GetCursorPosition() {
   point.y = y;
   return point;
 }
+
+void DisplayManager::StartEventListening() {}
+void DisplayManager::StopEventListening() {}
 
 }  // namespace nativeapi

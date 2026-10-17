@@ -1,5 +1,6 @@
 #include "positioning_strategy.h"
 #include "window.h"
+#include <utility>
 
 namespace nativeapi {
 
@@ -28,9 +29,9 @@ PositioningStrategy PositioningStrategy::Relative(const Rectangle& rect, const P
   return strategy;
 }
 
-PositioningStrategy PositioningStrategy::Relative(const Window& window, const Point& offset) {
+PositioningStrategy PositioningStrategy::Relative(std::shared_ptr<Window> window, Point offset) {
   PositioningStrategy strategy(Type::Relative);
-  strategy.relative_window_ = &window;
+  strategy.relative_window_ = std::move(window);
   strategy.relative_offset_ = offset;
   // relative_rect_ will be obtained dynamically in GetRelativeRectangle()
   return strategy;

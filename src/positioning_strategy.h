@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include "foundation/geometry.h"
 
 namespace nativeapi {
@@ -105,23 +106,24 @@ class PositioningStrategy {
    * @param offset Optional offset point to apply to the position (default: {0, 0})
    * @return PositioningStrategy configured for window-relative positioning
    *
-   * This method stores a reference to the window and will obtain its bounds
-   * dynamically when GetRelativeRectangle() is called, ensuring the position
-   * reflects the window's current state.
+   * This method retains the shared window and obtains its content bounds
+   * dynamically when GetRelativeRectangle() is called. Copies retain the same
+   * wrapper. Explicit native window closure still invalidates the bounds.
+   * A nullptr window produces an empty relative rectangle and no window reference.
    *
    * @example
    * ```cpp
    * auto window = std::make_shared<Window>();
    * // Position menu at bottom of window (no offset)
-   * auto strategy = PositioningStrategy::Relative(*window, {0, 0});
+   * auto strategy = PositioningStrategy::Relative(window, {0, 0});
    * menu->Open(strategy);
    *
    * // Position menu at bottom of window with 10px vertical offset
-   * auto strategy2 = PositioningStrategy::Relative(*window, {0, 10});
+   * auto strategy2 = PositioningStrategy::Relative(window, {0, 10});
    * menu->Open(strategy2);
    * ```
    */
-  static PositioningStrategy Relative(const Window& window, const Point& offset = {0, 0});
+  static PositioningStrategy Relative(std::shared_ptr<Window> window, Point offset = {0, 0});
 
   /**
    * @brief Get the type of this positioning strategy.
@@ -159,10 +161,10 @@ class PositioningStrategy {
   /**
    * @brief Get the relative window (for Relative type created with Window).
    *
-   * @return Pointer to the Window, or nullptr if not set
+   * @return Shared window wrapper, or nullptr if not set
    * @note Only valid when GetType() == Type::Relative and strategy was created with a Window
    */
-  const Window* GetRelativeWindow() const { return relative_window_; }
+  std::shared_ptr<Window> GetRelativeWindow() const { return relative_window_; }
 
  private:
   /**
@@ -174,7 +176,7 @@ class PositioningStrategy {
   Point absolute_position_;
   Rectangle relative_rect_;
   Point relative_offset_;
-  const Window* relative_window_;
+  std::shared_ptr<Window> relative_window_;
 };
 
 }  // namespace nativeapi

@@ -120,7 +120,7 @@ inline native_modifier_key_t to_c_modifier_key(nativeapi::ModifierKey value) {
     case nativeapi::ModifierKey::ScrollLock:
       return NATIVE_MODIFIER_KEY_SCROLL_LOCK;
     default:
-      return NATIVE_MODIFIER_KEY_NONE;
+      return static_cast<native_modifier_key_t>(value);
   }
 }
 

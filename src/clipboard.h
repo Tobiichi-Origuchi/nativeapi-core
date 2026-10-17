@@ -58,7 +58,11 @@ class ClipboardChangedEvent : public ClipboardEvent {
  *   need explicit text, clear requires Android 9+; image/file publication is unsupported
  * - iOS: ⚠️ Foreground only - UIPasteboard notifications and resume checks; reads
  *   follow system paste permission, file URLs remain subject to app sandbox access
- * - OpenHarmony: ❌ Not supported - Reads immediately complete with false; writes fail
+ * - OpenHarmony: ⚠️ N-API UI host initialization required - Text/HTML, independent
+ *   PixelMap images, readable local file/directory URIs and local change notifications;
+ *   reads follow READ_PASTEBOARD permission policy. Foreign sandbox URIs that cannot
+ *   resolve to an accessible local path are ignored. File conversion/validation
+ *   completes before publication. Before initialization reads fail and writes return false.
  *
  * @code
  * auto& clipboard = Clipboard::GetInstance();

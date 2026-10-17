@@ -10,11 +10,16 @@ DisplayManager& DisplayManager::GetInstance() {
 }
 
 std::vector<std::shared_ptr<Display>> DisplayManager::GetAll() {
-  return Reconcile(EnumerateNativeDisplays(), nullptr, nullptr);
+  std::vector<NativeDisplayInfo> natives;
+  if (!EnumerateNativeDisplays(natives))
+    return {};
+  return Reconcile(natives, nullptr, nullptr);
 }
 
 std::shared_ptr<Display> DisplayManager::GetPrimary() {
-  auto natives = EnumerateNativeDisplays();
+  std::vector<NativeDisplayInfo> natives;
+  if (!EnumerateNativeDisplays(natives))
+    return nullptr;
   auto displays = Reconcile(natives, nullptr, nullptr);
   for (size_t i = 0; i < natives.size(); ++i) {
     if (natives[i].is_primary) {
@@ -64,7 +69,10 @@ std::vector<std::shared_ptr<Display>> DisplayManager::Reconcile(
 void DisplayManager::HandleDisplaysChanged() {
   std::vector<std::shared_ptr<Display>> added;
   std::vector<std::shared_ptr<Display>> removed;
-  Reconcile(EnumerateNativeDisplays(), &added, &removed);
+  std::vector<NativeDisplayInfo> natives;
+  if (!EnumerateNativeDisplays(natives))
+    return;
+  Reconcile(natives, &added, &removed);
   for (const auto& display : added) {
     Emit<DisplayAddedEvent>(display);
   }

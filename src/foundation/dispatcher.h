@@ -50,8 +50,8 @@ void SetMainThread();
 /**
  * @brief Whether RunOnMainThread() can actually deliver on this platform.
  *
- * Returns false where no main-thread dispatch mechanism is wired up yet
- * (OpenHarmony, or Android before host initialization). Callers that must not silently drop work
+ * Returns false where no main-thread dispatch mechanism is available
+ * (Android/OpenHarmony before host initialization). Callers that must not silently drop work
  * should check this first.
  */
 bool IsMainThreadDispatchSupported();
@@ -117,7 +117,7 @@ void SetMainThreadDispatcher(MainThreadDispatchFn dispatch, MainThreadPredicateF
  *
  * @param timeout_ms How long to service work before returning. 0 drains only
  *                   what is already pending and returns immediately.
- * @return false if the platform has no main-loop integration (Android/OHOS),
+ * @return false if the platform cannot service a nested main loop (Android/OHOS),
  *         in which case nothing was serviced.
  */
 bool RunMainThreadLoopFor(int timeout_ms);

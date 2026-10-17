@@ -1,7 +1,7 @@
 #include "menu.h"
 
 namespace nativeapi {
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__OHOS__)
 bool Menu::SetBackend(MenuBackend backend) {
   return backend == MenuBackend::Native;
 }

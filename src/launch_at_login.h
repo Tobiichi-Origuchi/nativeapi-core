@@ -20,7 +20,10 @@ namespace nativeapi {
  *   registry instead, so there it is a shortcut in the user's Startup folder.
  * - macOS: ServiceManagement SMAppService for the main app or bundled login item helpers
  * - Linux (XDG): ~/.config/autostart/[app_id].desktop
- * - Android/iOS/OHOS: Not supported (returns false from IsSupported/operations)
+ * - Android/iOS: Not supported (returns false from IsSupported/operations)
+ * - OpenHarmony: Current-bundle startup status through the public API 21+ SDK.
+ *   Programmatic registration is unavailable: IsSupported/Enable/Disable return
+ *   false. Metadata can be recorded; arbitrary executables are unsupported.
  *
  * Notes:
  * - This API is intended for desktop environments. On mobile platforms this API is
@@ -52,7 +55,9 @@ class LaunchAtLogin {
   /**
    * @brief Check whether launch-at-login is supported on this platform.
    *
-   * @return true if supported; false for unsupported platforms (e.g., mobile).
+   * @return true if programmatic startup registration is supported; false otherwise.
+   * OpenHarmony can still query the current bundle status through IsEnabled(),
+   * but its public SDK has no registration controls, so this method returns false.
    */
   static bool IsSupported();
 
@@ -110,6 +115,14 @@ class LaunchAtLogin {
    *
    * @param display_name The human-readable name.
    * @return true if the value was stored locally; does not change OS registration until Enable().
+   *
+   * @note Platform availability:
+   * - macOS: ⚠️ Metadata only; ServiceManagement uses the bundle label.
+   * - Windows: ✅ Stored locally; used for packaged-app startup shortcuts.
+   * - Linux: ✅ Stored locally; written to the XDG entry by Enable().
+   * - Android: ❌ Always returns false.
+   * - iOS: ❌ Always returns false.
+   * - OpenHarmony: ⚠️ Metadata only; Settings continues to use the bundle label.
    */
   bool SetDisplayName(const std::string& display_name);
 
@@ -194,7 +207,17 @@ class LaunchAtLogin {
    *
    * @return true if currently enabled; false otherwise.
    *
-   * @see Enable() for platform availability.
+   * @note Platform availability:
+   * - macOS: ✅ Reads the main app or bundled helper registration status.
+   * - Windows: ✅ Reads the registration and applicable user-disabled state.
+   * - Linux: ✅ Reads the XDG autostart registration.
+   * - Android: ❌ Always returns false.
+   * - iOS: ❌ Always returns false.
+   * - OpenHarmony: ⚠️ Reads only the current bundle through the initialized UI
+   *   environment. Worker calls await the actual SDK Promise; UI calls request a
+   *   refresh and return the last completed value for that environment, initially
+   *   false. Missing host, invalid/foreign identifier and SDK failure return false.
+   *   Enable/Disable remain unavailable; the user controls startup in Settings.
    */
   bool IsEnabled() const;
 

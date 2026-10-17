@@ -50,6 +50,8 @@ class Display : public NativeObjectProvider {
    * @param display Pointer to the platform-specific display object
    *                (NSScreen* on macOS, HMONITOR on Windows, GdkMonitor* on
    *                Linux). The native object stays owned by the platform.
+   *                On OpenHarmony this is an opaque token encoding the system
+   *                display ID plus one; it must not be dereferenced or freed.
    *
    * @note Prefer obtaining displays from DisplayManager, which deduplicates
    *       instances; construct one directly only to wrap a native object you
@@ -78,6 +80,16 @@ class Display : public NativeObjectProvider {
   bool IsPrimary() const;
   DisplayOrientation GetOrientation() const;
   int GetRefreshRate() const;
+  /**
+   * @brief Gets framebuffer bit depth, or 0 when the platform cannot report it.
+   * @note Platform availability:
+   * - macOS: ⚠️ Returns the conventional default of 32
+   * - Windows: ⚠️ Returns the conventional default of 32
+   * - Linux: ⚠️ Returns the conventional default of 32
+   * - Android: ⚠️ Returns the conventional default of 24
+   * - iOS: ⚠️ Returns the conventional default of 32
+   * - OpenHarmony: ❌ The public NDK does not expose bit depth - Returns 0
+   */
   int GetBitDepth() const;
 
  protected:

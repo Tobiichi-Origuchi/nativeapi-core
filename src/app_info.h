@@ -17,7 +17,10 @@ namespace nativeapi {
  * - Windows: the executable's version resource; the MSIX package identity
  *   when the app is packaged
  * - Linux: the executable path (there is no standard metadata source)
- * - Android / OHOS: not available from this native layer
+ * - Android: not available from this native layer
+ * - OpenHarmony: current bundle through the initialized ArkTS UI environment;
+ *   the localized name uses the attached UIAbilityContext resource manager.
+ *   Calls from workers marshal to that UI environment.
  *
  * Typical usage:
  * @code
@@ -55,6 +58,7 @@ class AppInfo {
    * - macOS / iOS: the bundle identifier, e.g. "com.example.myapp"
    * - Windows: the MSIX package family name; "" for unpackaged apps
    * - Linux: "" (no standard identifier source)
+   * - OpenHarmony: the installed bundle name
    *
    * @return The identifier, or "" if unavailable.
    */
@@ -65,6 +69,7 @@ class AppInfo {
    *
    * - macOS / iOS: CFBundleShortVersionString
    * - Windows: version resource ProductVersion
+   * - OpenHarmony: bundle versionName
    *
    * @return The version, or "" if unavailable.
    */
@@ -75,6 +80,7 @@ class AppInfo {
    *
    * - macOS / iOS: CFBundleVersion
    * - Windows: the fourth component of the fixed file version
+   * - OpenHarmony: bundle versionCode as decimal text
    *
    * @return The build number, or "" if unavailable.
    */

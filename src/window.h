@@ -285,6 +285,14 @@ enum class ResizeEdge {
  * The Window class uses the PIMPL idiom to hide platform-specific implementation
  * details and provide a clean, consistent API across all supported platforms.
  *
+ * @note OpenHarmony: the ArkTS host must attach its WindowStage or existing
+ *       windows through platform/ohos/ohos_window.h. The host owns creation,
+ *       content and Ability lifecycle. Geometry is in logical units, converted
+ *       with the current display density. Asynchronous native operations take
+ *       effect later; getters read the actual native state. Unsupported device
+ *       or window operations leave that state unchanged. GetTitle() and policy
+ *       getters without an SDK query remember only successful nativeapi changes.
+ *
  * @note This class is not thread-safe. All window operations should be performed
  *       on the main UI thread.
  */
@@ -297,6 +305,9 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * Creates a new window with platform-default size, position, and properties.
    * The window is initially hidden and must be explicitly shown.
    * The window is automatically registered in the WindowRegistry.
+   * @note OpenHarmony: creation is asynchronous and belongs to WindowStage.
+   *       Use the platform host's CreateSubWindow completion instead. This
+   *       constructor leaves an unattached, invalid wrapper on OpenHarmony.
    */
   Window();
 
@@ -304,7 +315,10 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * @brief Constructor that wraps an existing native window object.
    *
    * @param window Pointer to an existing platform-specific window object
-   * @note The Window instance takes ownership of the native window object
+   * @note The Window instance takes ownership of the native window object.
+   *       On OpenHarmony the argument is a borrowed opaque token returned by
+   *       an attached Window's GetNativeObject(), not an OHNativeWindow surface
+   *       or a napi_value. The host retains native ownership.
    */
   Window(void* native_window);
 
@@ -322,7 +336,9 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
 
   /**
    * @brief Whether cancellable close requests are supported on this platform.
-   * @return True on desktop platforms, false on mobile platforms.
+   * @return True on desktop platforms and an initialized OpenHarmony host.
+   *         OpenHarmony accepts requests only for attached child windows;
+   *         Ability-owned main windows cannot be destroyed with Close().
    */
   static bool IsCloseSupported();
 
@@ -347,7 +363,10 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ✅ Supported - Continues GTK delete-event handling, X11 or Wayland.
    * - Android: ❌ Unsupported - Returns false.
    * - iOS: ❌ Unsupported - Returns false.
-   * - OpenHarmony: ❌ Unsupported - Returns false.
+   * - OpenHarmony: ⚠️ Close() accepts attached child windows only; main windows
+   *   return false. Public SDK title-button closes on attached main/child windows
+   *   also emit this object's cancellable/deferred request. Approval resumes the
+   *   original SDK close; nativeapi does not terminate the Ability itself.
    */
   bool Close();
 
@@ -368,6 +387,10 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * or GPUI view when a host framework owns the window), so subviews added to
    * it sit on top of that content. Its frame follows the content area;
    * View::SetFrame() on it is ignored.
+   *
+   * On OpenHarmony, the host attaches a native ContentSlot first. The root
+   * fills that slot, is cached across slot reattachment and leaves surrounding
+   * ArkTS content alone. Without a slot this method returns nullptr.
    *
    * @return The root view, or nullptr when View::IsSupported() is false or
    *         the native window is gone.
@@ -395,7 +418,7 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *   the window manager or compositor (Wayland: activation tokens) decides.
    * - Android: ❌ Not applicable - Focus follows the Activity lifecycle
    * - iOS: ⚠️ Partial - Makes the window the key window
-   * - OpenHarmony: ❌ Not applicable - Focus follows the Ability lifecycle
+   * - OpenHarmony: ⚠️ Attached main/child windows only; asynchronous focus transfer within the application.
    */
   void Focus();
 
@@ -421,7 +444,7 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *   window is lowered and the compositor decides.
    * - Android: ❌ Not applicable - Focus follows the Activity lifecycle
    * - iOS: ⚠️ Partial - Resigns the key window
-   * - OpenHarmony: ❌ Not applicable - Focus follows the Ability lifecycle
+   * - OpenHarmony: ⚠️ Returns focus to a visible attached window of the same application.
    */
   void Blur();
 
@@ -439,6 +462,10 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *
    * Makes the window visible and typically gives it focus. If the window
    * was minimized, it will be restored to its previous state.
+   * @note OpenHarmony also restores the owning Ability's SDK application-hidden
+   * window group for an activating show. A non-activating show keeps the SDK's
+   * focusOnShow=false behavior; restoration from application hiding may require
+   * an explicit Application::Show().
    */
   void Show();
 
@@ -462,6 +489,9 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * @brief Checks if the window is currently visible.
    *
    * @return true if the window is visible, false if hidden or minimized
+   * @note OpenHarmony includes successful SDK application hiding for the owning
+   * stage's main window and registered descendants. The SDK's per-window showing
+   * flag alone remains true while the Ability's whole window group is hidden.
    */
   bool IsVisible() const;
 
@@ -489,7 +519,13 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *   does not tell).
    * - Android: ❌ Not applicable - Always Unknown
    * - iOS: ❌ Not applicable - Always Unknown
-   * - OpenHarmony: ❌ Not applicable - Always Unknown
+   * - OpenHarmony: ✅ Supported on an initialized Window.SessionManager host.
+   *   Public SDK occlusionStateChanged (or windowVisibilityChange fallback)
+   *   observations distinguish a visible portion from full occlusion. Before the
+   *   first observation a shown window is Unknown; hidden windows are Occluded.
+   *   Partial/absent occlusion both mean Visible. SDK rules for transparent,
+   *   animated and masked windows apply; no screen-geometry approximation is used.
+   *   Closed/foreign windows return Unknown. Workers marshal queries to UI.
    */
   WindowOcclusionState GetOcclusionState() const;
 
@@ -559,6 +595,21 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * WindowEnteredFullScreenEvent and WindowExitedFullScreenEvent; on macOS and
    * Linux it completes asynchronously, so IsFullScreen() may still return the old
    * state right after this call.
+   *
+   * @note Platform availability:
+   * - macOS: ✅ Native fullscreen, completed asynchronously.
+   * - Windows: ✅ Borderless screen-sized window.
+   * - Linux: ⚠️ Window-manager controlled; completion is asynchronous.
+   * - Android: ❌ The current backend does not change fullscreen state.
+   * - iOS: ⚠️ Sets the root controller's modal presentation style; it does not
+   *   present or dismiss the controller.
+   * - OpenHarmony: ⚠️ Supported freeform main/child windows use public SDK
+   *   immersive maximize and recover, restoring a previous maximized state.
+   *   The SDK may reject unsupported children or supported-mode restrictions.
+   *   Outside a freeform workspace, content layout/system-bar requests retain
+   *   their SDK restrictions. A phone child's SDK fullscreen flag can be true
+   *   while its floating frame is unchanged. Calls submit asynchronously;
+   *   queries and events report confirmed SDK state, not request submission.
    */
   void SetFullScreen(bool is_full_screen);
 
@@ -566,6 +617,7 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * @brief Checks if the window is currently in fullscreen mode.
    *
    * @return true if the window is fullscreen, false otherwise
+   * @see SetFullScreen() for platform availability and confirmed-state semantics.
    */
   bool IsFullScreen() const;
   // === Size and Bounds Management ===
@@ -704,14 +756,23 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *   ratio can be off by a pixel after a resize.
    * - Android: ❌ Not applicable - Always ignored
    * - iOS: ❌ Not applicable - Always ignored
-   * - OpenHarmony: ❌ Not applicable - Always ignored
+   * - OpenHarmony: ⚠️ API 21+ uses a nonpersistent content-ratio constraint on
+   *   supported main windows, effective during floating-window edge drags.
+   *   SDK rejection leaves the last successful constraint unchanged. UI calls
+   *   submit without blocking; workers wait for SDK completion. Nonfinite inputs
+   *   are ignored. Programmatic resizing remains unconstrained.
+   *   Clearing uses resetAspectRatio(), which also clears a saved SDK ratio.
    */
   void SetAspectRatio(double aspect_ratio);
 
   /**
    * @brief Gets the aspect ratio constraint set by SetAspectRatio().
    *
-   * @return Width divided by height, or 0 when no constraint is set
+   * On OpenHarmony this is the last successfully applied nativeapi constraint,
+   * shared by aliases of the same live window. The SDK exposes no ratio getter;
+   * changes made directly by the ArkTS host are not reflected here.
+   *
+   * @return Width divided by height, or 0 when no constraint is set.
    */
   double GetAspectRatio() const;
   // === Window Behavior Properties ===
@@ -761,6 +822,22 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *
    * Controls the availability of minimize functionality in the window's
    * title bar and system menu. Programmatic minimizing is still possible.
+   *
+   * @note Platform availability:
+   * - macOS: ✅ Native caption policy
+   * - Windows: ✅ Native caption policy
+   * - Linux: ⚠️ GTK controls and window-manager policy hints
+   * - Android: ❌ Setter ignored
+   * - iOS: ❌ Setter ignored
+   * - OpenHarmony: ⚠️ Public SDK caption buttons on supported decorated windows.
+   *   These are caption-only policies; other system gestures are unaffected.
+   *   Independent policies survive collective button hiding and title-bar style
+   *   changes; programmatic Minimize/Maximize remain available, while Close()
+   *   retains its documented child-only restriction. SDK refusal preserves the
+   *   last applied policies. Desktop main windows start with enabled policies;
+   *   other window profiles return false until a button request succeeds. Native
+   *   destruction returns false. There is no individual SDK getter; external
+   *   button edits do not rewrite these independent policies.
    */
   void SetMinimizable(bool is_minimizable);
 
@@ -768,6 +845,7 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * @brief Checks if the window can be minimized by the user.
    *
    * @return true if user can minimize the window, false otherwise
+   * @see SetMinimizable() for platform availability and policy semantics.
    */
   bool IsMinimizable() const;
 
@@ -778,6 +856,23 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *
    * Controls the availability of maximize functionality in the window's
    * title bar and system menu. Programmatic maximizing is still possible.
+   *
+   * @note Platform availability:
+   * - macOS: ✅ Native caption policy
+   * - Windows: ✅ Native caption policy
+   * - Linux: ⚠️ GTK controls and window-manager policy hints
+   * - Android: ❌ Setter ignored
+   * - iOS: ❌ Setter ignored
+   * - OpenHarmony: ⚠️ Public SDK caption buttons on supported decorated windows.
+   *   These are caption-only policies; native title-bar double-click
+   *   still maximizes even when the maximize button is hidden.
+   *   Independent policies survive collective button hiding and title-bar style
+   *   changes; programmatic Minimize/Maximize remain available, while Close()
+   *   retains its documented child-only restriction. SDK refusal preserves the
+   *   last applied policies. Desktop main windows start with enabled policies;
+   *   other window profiles return false until a button request succeeds. Native
+   *   destruction returns false. There is no individual SDK getter; external
+   *   button edits do not rewrite these independent policies.
    */
   void SetMaximizable(bool is_maximizable);
 
@@ -785,6 +880,7 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * @brief Checks if the window can be maximized by the user.
    *
    * @return true if user can maximize the window, false otherwise
+   * @see SetMaximizable() for platform availability and policy semantics.
    */
   bool IsMaximizable() const;
 
@@ -795,6 +891,24 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *
    * Controls whether the window supports fullscreen mode. On some platforms,
    * this affects the availability of fullscreen controls in the UI.
+   *
+   * @note Platform availability:
+   * - macOS: ❌ The current setter is not implemented.
+   * - Windows: ❌ Setter ignored; live native windows can enter borderless fullscreen.
+   * - Linux: ❌ The current setter is not implemented.
+   * - Android: ❌ Setter ignored.
+   * - iOS: ❌ Setter ignored.
+   * - OpenHarmony: ⚠️ Changes the public supported-mode mask (Window API 26+,
+   *   or the primary WindowStage API 15+ fallback). The SDK couples fullscreen
+   *   and nonimmersive maximize, so disabling this mode blocks both. Other mode
+   *   bits are preserved. Main windows start from the attached Ability's declared
+   *   modes; a floating child can establish its floating baseline. Hosts must
+   *   publish known higher-priority StartOptions/direct-SDK overrides through the
+   *   OHOS host seam, since there is no public live mask getter. Requests that
+   *   would leave an invalid/empty mode set are ignored. UI requests are queued
+   *   asynchronously; workers wait for their own SDK completion. SDK refusal
+   *   preserves the preceding policy, and destruction cancels pending requests.
+   *   This policy does not control phone content-layout/system-bar flags.
    */
   void SetFullScreenable(bool is_full_screenable);
 
@@ -802,6 +916,10 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * @brief Checks if the window supports fullscreen mode.
    *
    * @return true if fullscreen is supported, false otherwise
+   * @see SetFullScreenable() for platform policy semantics. On OpenHarmony the
+   *   getter reports a host-published/successfully applied mask or the declared
+   *   primary baseline; an unknown child baseline and destroyed windows return
+   *   false. Unreported host SDK changes are not reflected.
    */
   bool IsFullScreenable() const;
 
@@ -812,6 +930,22 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *
    * When disabled, the close button in the title bar is hidden or disabled.
    * The window can still be closed programmatically.
+   *
+   * @note Platform availability:
+   * - macOS: ✅ Native caption policy
+   * - Windows: ✅ Native caption policy
+   * - Linux: ⚠️ GTK controls and window-manager policy hints
+   * - Android: ❌ Setter ignored
+   * - iOS: ❌ Setter ignored
+   * - OpenHarmony: ⚠️ Public SDK caption buttons on supported decorated windows.
+   *   These are caption-only policies; other system gestures are unaffected.
+   *   Independent policies survive collective button hiding and title-bar style
+   *   changes; programmatic Minimize/Maximize remain available, while Close()
+   *   retains its documented child-only restriction. SDK refusal preserves the
+   *   last applied policies. Desktop main windows start with enabled policies;
+   *   other window profiles return false until a button request succeeds. Native
+   *   destruction returns false. There is no individual SDK getter; external
+   *   button edits do not rewrite these independent policies.
    */
   void SetClosable(bool is_closable);
 
@@ -819,6 +953,7 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * @brief Checks if the window can be closed by the user.
    *
    * @return true if user can close the window, false otherwise
+   * @see SetClosable() for platform availability and policy semantics.
    */
   bool IsClosable() const;
 
@@ -837,7 +972,11 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ❌ Not implemented - Returns default value (visible)
    * - Android: ❌ Not applicable - Mobile apps don't have window control buttons
    * - iOS: ❌ Not applicable - Mobile apps don't have window control buttons
-   * - OpenHarmony: ❌ Not applicable - Mobile apps don't have window control buttons
+   * - OpenHarmony: ⚠️ Uses public SDK title-button visibility on supported decorated
+   *   windows (normally a freeform main window). Unsupported phone/child requests
+   *   are ignored. The getter reads the live SDK button-area size,
+   *   so an externally configured nonempty subset also counts as visible. Layout
+   *   updates and full-screen hover behavior are managed by the system.
    */
   void SetWindowControlButtonsVisible(bool is_visible);
 
@@ -852,7 +991,10 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ❌ Not implemented - Always returns true
    * - Android: ❌ Not applicable - Always returns false
    * - iOS: ❌ Not applicable - Always returns false
-   * - OpenHarmony: ❌ Not applicable - Always returns false
+   * - OpenHarmony: ⚠️ Reads the live SDK title-button area, including controls
+   *   explicitly shown over a hidden title bar. False for unavailable/closed
+   *   windows, empty areas or SDK errors.
+   *   @see SetWindowControlButtonsVisible() for details.
    */
   bool IsWindowControlButtonsVisible() const;
 
@@ -936,7 +1078,10 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *   its toplevels nor learns where they are.
    * - Android: ❌ Not applicable - Always ignored, returns false
    * - iOS: ❌ Not applicable - Always ignored, returns false
-   * - OpenHarmony: ❌ Not applicable - Always ignored, returns false
+   * - OpenHarmony: ⚠️ API 19+ public SDK reparenting for attached application
+   *   subwindows and parents in the same UI environment, subject to device/freeform
+   *   window support. nullptr, main-window receivers and overlapping requests are
+   *   rejected. UI callers receive submission status; workers wait for SDK completion.
    */
   bool SetParentWindow(std::shared_ptr<Window> parent);
 
@@ -944,7 +1089,9 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * @brief Gets the window this window belongs to.
    *
    * Read from the native window, so it also reports a parent the embedding
-   * framework has set.
+   * framework has set. On OpenHarmony only attached parents can be returned;
+   * API 19+ reads the live SDK relationship, while older SDKs use the creation
+   * relationship. SDK query failure returns nullptr.
    *
    * @return The parent window, or nullptr if this window has none
    * @see SetParentWindow() for platform availability.
@@ -978,7 +1125,7 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *   window managers normally honor these hints; Wayland compositors may ignore them.
    * - Android: ❌ Not applicable - Always ignored
    * - iOS: ❌ Not applicable - Always ignored
-   * - OpenHarmony: ❌ Not applicable - Always ignored
+   * - OpenHarmony: ✅ Show and Focus honor the non-activating policy for attached windows.
    */
   void SetNonActivating(bool is_non_activating);
 
@@ -1057,7 +1204,7 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ✅ Fully supported - Hides the window's header bar
    * - Android: ❌ Not applicable - Always ignored
    * - iOS: ❌ Not applicable - Always ignored
-   * - OpenHarmony: ❌ Not applicable - Always ignored
+   * - OpenHarmony: ⚠️ Changes native decorations where the device and window type support them.
    */
   void SetTitleBarStyle(TitleBarStyle style);
 
@@ -1088,7 +1235,12 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ❌ Not supported - Always returns false
    * - Android: ❌ Not applicable - Always returns false
    * - iOS: ❌ Not applicable - Always returns false
-   * - OpenHarmony: ❌ Not applicable - Always returns false
+   * - OpenHarmony: ⚠️ Child windows use public SDK corner radii: square 0,
+   *   RoundSmall 4 vp and Round 8 vp. Default restores the radius read before
+   *   this library's first request; it does not re-enter changing system policy.
+   *   Main windows and invalid/dead wrappers return false. UI calls report
+   *   submission; workers wait for SDK success. The shared preference record
+   *   changes only on successful completion. An overlapping request returns false.
    */
   bool SetCornerPreference(WindowCornerPreference preference);
 
@@ -1097,15 +1249,16 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * @return The shared native window's preference, or Default when unset,
    *         unsupported or the native window no longer exists.
    *
-   * DWM exposes this attribute for setting only. This reads the library's
-   * record on the native window, not the radius currently drawn by DWM.
+   * This reads the library's successful preference record on the native window,
+   * not a live radius or changes made directly through another native API.
    * @see SetCornerPreference() for platform availability.
    */
   WindowCornerPreference GetCornerPreference() const;
 
   /**
    * @brief Checks if this platform supports window corner preferences.
-   * @return true on Windows 11 build 22000 and later; false elsewhere.
+   * @return true on supported Windows versions or an initialized OpenHarmony
+   *         Window.SessionManager host; false elsewhere.
    * @see SetCornerPreference() for platform availability.
    */
   static bool IsCornerPreferenceSupported();
@@ -1142,7 +1295,18 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *   sibling above the content, not an overlay over it.
    * - Android: ❌ Not applicable - Always returns false
    * - iOS: ❌ Not applicable - Always returns false
-   * - OpenHarmony: ❌ Not applicable - Always returns false
+   * - OpenHarmony: ⚠️ Uses public immersive content layout, including phone
+   *   system-bar insets. UI calls report asynchronous submission; workers wait
+   *   for SDK completion and confirm the actual layout flag. SDK no-op success
+   *   is false on a worker when the live flag does not match the request. A pending
+   *   layout request, invalid/destroyed window or SDK invocation failure returns
+   *   false. Observe
+   *   IsContentUnderTitleBar() for the actual layout; this does not change the
+   *   native window mode or frame. On the tested API 26 computer, floating-main
+   *   requests leave the live layout flag unchanged; child flags can change
+   *   while the decorated content inset remains. This is not a transparent native-caption overlay.
+   *   Native destruction cancels pending requests, and late completions do not
+   *   publish fullscreen events.
    */
   bool SetContentUnderTitleBar(bool is_content_under_title_bar);
 
@@ -1184,7 +1348,7 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ❌ Not supported - Always returns false
    * - Android: ❌ Not supported - Always returns false
    * - iOS: ❌ Not supported - Always returns false
-   * - OpenHarmony: ❌ Not supported - Always returns false
+   * - OpenHarmony: ⚠️ Native privacy mode requires ohos.permission.PRIVACY_WINDOW; false on denial.
    */
   bool SetContentProtection(bool is_content_protected);
 
@@ -1228,7 +1392,14 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *   remain controlled by the window manager.
    * - Android: ❌ Not applicable - Always ignored
    * - iOS: ❌ Not applicable - Always ignored
-   * - OpenHarmony: ❌ Not applicable - Always ignored
+   * - OpenHarmony: ⚠️ Child windows use public setWindowShadowRadius: zero
+   *   disables, 18 logical pixels enables. Main windows use the permission-gated
+   *   setWindowShadowEnabled SDK, requiring the normal system_grant permission
+   *   ohos.permission.SET_WINDOW_TRANSPARENT on PCs/tablets; rejection preserves
+   *   the last applied record.
+   *   HasShadow reports this library's last successful request (false until
+   *   configured); the SDK has no public getter for existing shadow state.
+   *   Native color/offset/blur defaults remain system-controlled.
    */
   void SetHasShadow(bool has_shadow);
 
@@ -1255,7 +1426,13 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ✅ Hidden-title-bar GtkWindows; core draws in the same surface
    * - Android: ❌ Unsupported, returns false
    * - iOS: ❌ Unsupported, returns false
-   * - OpenHarmony: ❌ Unsupported, returns false
+   * - OpenHarmony: ⚠️ Attached hidden-title-bar windows with the optional
+   *   NativeWindowShadowHost Stage companion and a registered transparent surface
+   *   page. Core rasterizes the clipped contour on a worker; a private public-SDK
+   *   helper is non-focusable and passes all pointer input through. UI calls
+   *   report submission; workers wait for SDK completion. Overlapping configuration
+   *   changes return false; visibility changes are serialized. Main-window native
+   *   shadow suppression also needs SET_WINDOW_TRANSPARENT on supported devices.
    */
   bool SetCustomShadow(std::shared_ptr<WindowShadow> shadow);
 
@@ -1354,7 +1531,14 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ⚠️ GDK visual and input regions, only on backends supporting both (X11)
    * - Android: ❌ Unsupported, returns false
    * - iOS: ❌ Unsupported, returns false
-   * - OpenHarmony: ❌ Unsupported, returns false
+   * - OpenHarmony: ⚠️ API 24+ child-window compositor mask with hidden decorations.
+   *   Maximum 16 Mi physical pixels with the API 26 alpha-mask method, or 1 Mi with
+   *   the API 24/25 nested-array method; each dimension is at most 16384 pixels.
+   *   Main windows are rejected. UI calls report submission; worker calls wait for
+   *   SDK completion. IsShaped() records the last successful library request;
+   *   external SDK mask changes are not tracked. A failed request keeps that state.
+   *   Clearing a window with no SDK mask may fail. Wait for the new rectangle
+   *   after resizing before reapplying; a resize promise alone may precede it.
    */
   bool SetShape(std::shared_ptr<WindowShape> shape);
 
@@ -1385,7 +1569,9 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ✅ GDK input regions, including X11 and Wayland
    * - Android: ❌ Unsupported, returns false
    * - iOS: ❌ Unsupported, returns false
-   * - OpenHarmony: ❌ Unsupported, returns false
+   * - OpenHarmony: ❌ Unsupported for ordinary applications without restricted
+   *   SET_WINDOW_TOUCH_AREAS permission (system_basic, PCs/API 26+). The SDK
+   *   accepts at most ten rectangles, not a general independent polygon mask.
    */
   bool SetInputShape(std::shared_ptr<WindowShape> shape);
 
@@ -1502,7 +1688,8 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ✅ Input-region pass-through; movement forwarding on X11 only.
    *   Wayland cannot report global pointer movement outside the input region.
    *   Disabling pass-through restores the latest explicit input shape.
-   * - Android, iOS, OpenHarmony: ❌ Always returns false
+   * - Android, iOS: ❌ Always returns false
+   * - OpenHarmony: ✅ Native touchability; forwarding is unsupported and returns false without changing the window.
    */
   bool SetIgnoreMouseEvents(bool is_ignore_mouse_events, bool forward = false);
 
@@ -1536,7 +1723,7 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    *   compositors may ignore them
    * - Android: ❌ Not applicable - Focus is managed by the system
    * - iOS: ❌ Not applicable - Focus is managed by the system
-   * - OpenHarmony: ❌ Not applicable - Focus is managed by the system
+   * - OpenHarmony: ✅ Updates native window focusability for attached windows.
    *
    * On Windows and Linux, SetNonActivating(true) also suppresses keyboard focus.
    * Turning it off restores the last SetFocusable() policy. Focus() does nothing
@@ -1658,7 +1845,16 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ⚠️ Requests maximize/unmaximize; the window manager may ignore it.
    * - Android: ❌ Not applicable - Always returns false
    * - iOS: ❌ Not applicable - Always returns false
-   * - OpenHarmony: ❌ Not applicable - Always returns false
+   * - OpenHarmony: ⚠️ Public SDK maximize in floating mode; recover in
+   *   maximized or split-screen mode. A live API 22+ free-window query must
+   *   confirm support; only older SDKs without that query use a 2in1 fallback.
+   *   An applied disabled maximize caption policy rejects this action; missing
+   *   individual caption-button support does not disable otherwise valid SDK
+   *   actions. Fullscreen, minimized, unknown, destroyed and pending windows
+   *   reject requests. UI callers report SDK promise submission without blocking;
+   *   workers wait for its result. The SDK may reject an unsupported window
+   *   asynchronously after a UI caller returns. Hosts forward their custom
+   *   title-bar gesture explicitly; the native system gesture is unchanged.
    *
    * Full-screen and minimized windows reject state changes. Disabled maximize or
    * minimize controls reject their corresponding action.
@@ -1681,7 +1877,9 @@ class Window : public EventEmitter<WindowEvent>, public NativeObjectProvider,
    * - Linux: ✅ Fully supported - Starts a window-manager move drag (X11 and Wayland).
    * - Android: ❌ Not applicable - Always ignored
    * - iOS: ❌ Not applicable - Always ignored
-   * - OpenHarmony: ❌ Not applicable - Always ignored
+   * - OpenHarmony: ⚠️ Calls public startMoving from an active ArkTS onTouch down
+   *   or move handler. Supports child/floating windows and freeform main windows;
+   *   full-screen phone main windows are rejected by the SDK.
    */
   void StartDragging();
 
@@ -1795,7 +1993,7 @@ class WindowBlurredEvent : public WindowEvent {
  * - Linux: ⚠️ X11 only - A Wayland compositor does not tell a client that it was minimized.
  * - Android: ❌ Not applicable - Never emitted
  * - iOS: ❌ Not applicable - Never emitted
- * - OpenHarmony: ❌ Not applicable - Never emitted
+ * - OpenHarmony: ⚠️ Native window mode changes; hiding a child does not imply minimization.
  */
 class WindowMinimizedEvent : public WindowEvent {
  public:
@@ -1824,7 +2022,7 @@ class WindowMinimizedEvent : public WindowEvent {
  * - Linux: ✅ Fully supported
  * - Android: ❌ Not applicable - Never emitted
  * - iOS: ❌ Not applicable - Never emitted
- * - OpenHarmony: ❌ Not applicable - Never emitted
+ * - OpenHarmony: ⚠️ Native window mode changes where the device supports maximization.
  */
 class WindowMaximizedEvent : public WindowEvent {
  public:
@@ -1852,7 +2050,7 @@ class WindowMaximizedEvent : public WindowEvent {
  * - Linux: ⚠️ Leaving the maximized state everywhere; leaving the minimized state on X11 only.
  * - Android: ❌ Not applicable - Never emitted
  * - iOS: ❌ Not applicable - Never emitted
- * - OpenHarmony: ❌ Not applicable - Never emitted
+ * - OpenHarmony: ⚠️ Native transitions out of maximized/minimized mode.
  */
 class WindowRestoredEvent : public WindowEvent {
  public:
@@ -1881,7 +2079,7 @@ class WindowRestoredEvent : public WindowEvent {
  * - Linux: ⚠️ X11 only - A Wayland client never learns where its window is.
  * - Android: ❌ Not applicable - Never emitted
  * - iOS: ❌ Not applicable - Never emitted
- * - OpenHarmony: ❌ Not applicable - Never emitted
+ * - OpenHarmony: ✅ Native rectangle-change notifications on attached windows, in logical coordinates.
  */
 class WindowMovedEvent : public WindowEvent {
  public:
@@ -1920,7 +2118,7 @@ class WindowMovedEvent : public WindowEvent {
  * - Linux: ✅ Fully supported
  * - Android: ❌ Not applicable - Never emitted
  * - iOS: ❌ Not applicable - Never emitted
- * - OpenHarmony: ❌ Not applicable - Never emitted
+ * - OpenHarmony: ✅ Native rectangle-change notifications on attached windows, in logical coordinates.
  */
 class WindowResizedEvent : public WindowEvent {
  public:
@@ -1963,7 +2161,7 @@ class WindowResizedEvent : public WindowEvent {
  * - Linux: ✅ Fully supported
  * - Android: ❌ Not applicable - Never emitted
  * - iOS: ❌ Not applicable - Never emitted
- * - OpenHarmony: ❌ Not applicable - Never emitted
+ * - OpenHarmony: ✅ Emitted once when the host attaches the native window.
  */
 class WindowCreatedEvent : public WindowEvent {
  public:
@@ -1993,7 +2191,7 @@ class WindowCreatedEvent : public WindowEvent {
  * - Linux: ✅ Fully supported
  * - Android: ❌ Not applicable - Never emitted
  * - iOS: ❌ Not applicable - Never emitted
- * - OpenHarmony: ❌ Not applicable - Never emitted
+ * - OpenHarmony: ✅ Native destruction invalidates all wrappers and removes the registry entry.
  */
 class WindowClosedEvent : public WindowEvent {
  public:
@@ -2021,7 +2219,9 @@ class WindowClosedEvent : public WindowEvent {
  *   its own shortcuts (F11 in many) alike; emitted when the window manager confirms it.
  * - Android: ❌ Not applicable - Never emitted
  * - iOS: ❌ Not applicable - Never emitted
- * - OpenHarmony: ❌ Not applicable - Never emitted
+ * - OpenHarmony: ⚠️ Confirmed SDK fullscreen changes. Freeform windows use native
+ *   window mode; phone/non-freeform windows use the SDK fullscreen property,
+ *   which can change with content layout without enlarging a child frame.
  */
 class WindowEnteredFullScreenEvent : public WindowEvent {
  public:
@@ -2042,7 +2242,8 @@ class WindowEnteredFullScreenEvent : public WindowEvent {
  * - Linux: ✅ Fully supported - Emitted when the window manager confirms it.
  * - Android: ❌ Not applicable - Never emitted
  * - iOS: ❌ Not applicable - Never emitted
- * - OpenHarmony: ❌ Not applicable - Never emitted
+ * - OpenHarmony: ⚠️ Confirmed SDK fullscreen exits; see WindowEnteredFullScreenEvent
+ *   for freeform mode versus phone content-layout semantics.
  */
 class WindowExitedFullScreenEvent : public WindowEvent {
  public:
@@ -2089,7 +2290,7 @@ class WindowCloseRequestedEvent : public WindowEvent {
  *   state.
  * - Android: ❌ Not applicable - Never emitted
  * - iOS: ❌ Not applicable - Never emitted
- * - OpenHarmony: ❌ Not applicable - Never emitted
+ * - OpenHarmony: ⚠️ Successful nativeapi property changes; external title/policy changes have no public SDK query.
  */
 class WindowPropertyChangedEvent : public WindowEvent {
  public:

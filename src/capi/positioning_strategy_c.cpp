@@ -56,12 +56,9 @@ native_positioning_strategy_t native_positioning_strategy_relative_with_rect_and
 native_positioning_strategy_t native_positioning_strategy_relative_with_window_and_offset(native_window_t window, native_point_t offset) {
   try {
     auto window_cpp = nativeapi::HandleTable::GetInstance().Resolve<nativeapi::Window>(window);
-    if (!window_cpp) {
-      return 0;
-    }
     auto offset_cpp = to_cpp_point(offset);
     return nativeapi::HandleTable::GetInstance().Insert(
-        std::make_shared<nativeapi::PositioningStrategy>(nativeapi::PositioningStrategy::Relative(*window_cpp, offset_cpp)));
+        std::make_shared<nativeapi::PositioningStrategy>(nativeapi::PositioningStrategy::Relative(window_cpp, offset_cpp)));
   } catch (...) {
     fprintf(stderr, "[nativeapi] %s: unexpected exception\n", "native_positioning_strategy_relative_with_window_and_offset");
     return 0;
@@ -126,6 +123,19 @@ native_point_t native_positioning_strategy_get_relative_offset(native_positionin
     fprintf(stderr, "[nativeapi] %s: unexpected exception\n", "native_positioning_strategy_get_relative_offset");
     native_point_t result = {};
     return result;
+  }
+}
+
+native_window_t native_positioning_strategy_get_relative_window(native_positioning_strategy_t positioning_strategy) {
+  auto self = nativeapi::HandleTable::GetInstance().Resolve<nativeapi::PositioningStrategy>(positioning_strategy);
+  if (!self) {
+    return 0;
+  }
+  try {
+    return nativeapi::HandleTable::GetInstance().Insert(self->GetRelativeWindow());
+  } catch (...) {
+    fprintf(stderr, "[nativeapi] %s: unexpected exception\n", "native_positioning_strategy_get_relative_window");
+    return 0;
   }
 }
 

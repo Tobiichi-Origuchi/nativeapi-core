@@ -1,75 +1,34 @@
 #include "color.h"
-#include <cstring>
-#include <stdexcept>
+#include <cstddef>
 
 namespace nativeapi {
 
-// Parse a single hex digit (0-9, A-F, a-f) to a value 0-15
-static unsigned char ParseHexDigit(char c) {
-  if (c >= '0' && c <= '9')
-    return c - '0';
-  if (c >= 'A' && c <= 'F')
-    return c - 'A' + 10;
-  if (c >= 'a' && c <= 'f')
-    return c - 'a' + 10;
-  throw std::invalid_argument("Invalid hex digit");
+namespace {
+int HexDigit(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
 }
-
-// Parse two hex digits to a byte value 0-255
-static unsigned char ParseHexByte(const char* hex) {
-  return (ParseHexDigit(hex[0]) << 4) | ParseHexDigit(hex[1]);
-}
+}  // namespace
 
 Color Color::FromHex(const char* hex) {
-  if (!hex) {
-    throw std::invalid_argument("Hex string cannot be null");
+  if (!hex) return Color::Transparent;
+  if (*hex == '#') ++hex;
+  size_t length = 0;
+  while (length < 9 && hex[length]) ++length;
+  if (length != 3 && length != 4 && length != 6 && length != 8)
+    return Color::Transparent;
+  unsigned char channels[4]{0, 0, 0, 255};
+  const bool short_form = length <= 4;
+  const size_t count = short_form ? length : length / 2;
+  for (size_t i = 0; i < count; ++i) {
+    const int high = HexDigit(hex[i * (short_form ? 1 : 2)]);
+    const int low = short_form ? high : HexDigit(hex[i * 2 + 1]);
+    if (high < 0 || low < 0) return Color::Transparent;
+    channels[i] = static_cast<unsigned char>(high * 16 + low);
   }
-
-  // Skip leading '#' if present
-  if (hex[0] == '#') {
-    hex++;
-  }
-
-  size_t len = std::strlen(hex);
-
-  // Parse based on format
-  if (len == 3) {
-    // #RGB format - expand each digit to two digits
-    unsigned char r = ParseHexDigit(hex[0]);
-    unsigned char g = ParseHexDigit(hex[1]);
-    unsigned char b = ParseHexDigit(hex[2]);
-    // Expand: F -> FF (15 -> 255)
-    r = (r << 4) | r;
-    g = (g << 4) | g;
-    b = (b << 4) | b;
-    return Color{r, g, b, 255};
-  } else if (len == 4) {
-    // #RGBA format - expand each digit to two digits
-    unsigned char r = ParseHexDigit(hex[0]);
-    unsigned char g = ParseHexDigit(hex[1]);
-    unsigned char b = ParseHexDigit(hex[2]);
-    unsigned char a = ParseHexDigit(hex[3]);
-    r = (r << 4) | r;
-    g = (g << 4) | g;
-    b = (b << 4) | b;
-    a = (a << 4) | a;
-    return Color{r, g, b, a};
-  } else if (len == 6) {
-    // #RRGGBB format
-    unsigned char r = ParseHexByte(hex);
-    unsigned char g = ParseHexByte(hex + 2);
-    unsigned char b = ParseHexByte(hex + 4);
-    return Color{r, g, b, 255};
-  } else if (len == 8) {
-    // #RRGGBBAA format
-    unsigned char r = ParseHexByte(hex);
-    unsigned char g = ParseHexByte(hex + 2);
-    unsigned char b = ParseHexByte(hex + 4);
-    unsigned char a = ParseHexByte(hex + 6);
-    return Color{r, g, b, a};
-  } else {
-    throw std::invalid_argument("Invalid hex color format. Expected #RGB, #RGBA, #RRGGBB, or #RRGGBBAA");
-  }
+  return {channels[0], channels[1], channels[2], channels[3]};
 }
 
 // Color constants

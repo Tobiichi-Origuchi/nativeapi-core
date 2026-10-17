@@ -38,7 +38,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 elseif(APPLE)
     file(GLOB PLATFORM_SOURCES "platform/macos/*.mm")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
-    file(GLOB PLATFORM_SOURCES "platform/ohos/*.cpp")
+    file(GLOB PLATFORM_SOURCES CONFIGURE_DEPENDS "platform/ohos/*.cpp")
 elseif(WIN32)
     file(GLOB PLATFORM_SOURCES "platform/windows/*.cpp")
     list(FILTER PLATFORM_SOURCES EXCLUDE REGEX "(menu_winui3|message_dialog_winui3|window_winui3|winui3_runtime|view_winui3)_windows\\.cpp$")
@@ -99,7 +99,12 @@ elseif(APPLE)
     target_link_libraries(nativeapi PUBLIC "-framework ServiceManagement")
     target_compile_options(nativeapi PRIVATE "-x" "objective-c++")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "OHOS")
-    target_link_libraries(nativeapi PUBLIC hilog_ndk.z)
+    # Full Preferences enumeration/flush requires API 23; display queries use
+    # API 14+, and clipboard/ArkTS dispatch use the public NDK/N-API services.
+    target_link_libraries(nativeapi PUBLIC hilog_ndk.z deviceinfo_ndk.z
+      native_display_manager native_window_manager ohpreferences pasteboard udmf ace_napi.z uv dl
+      image_source image_packer pixelmap image_common asset_ndk.z ohfileuri ace_ndk.z ohinput)
+    set_target_properties(nativeapi PROPERTIES POSITION_INDEPENDENT_CODE ON)
 elseif(WIN32)
     target_link_libraries(nativeapi PUBLIC user32 shell32 ole32 uuid comctl32 dwmapi gdiplus crypt32 advapi32 version)
 endif ()

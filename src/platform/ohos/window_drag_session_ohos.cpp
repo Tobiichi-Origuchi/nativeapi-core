@@ -2,8 +2,10 @@
 
 namespace nativeapi {
 
-// Windows are not dragged around a shared screen on this platform, so there is
-// nothing to track: QueryPointer() fails and Start() returns false.
+// Ordinary apps cannot establish global primary-button tracking: the public
+// mouse monitor requires INPUT_MONITORING and a screen-recording scenario.
+// A local component gesture is not a replacement for a session that continues
+// across windows. Native Window::StartDragging() is a separate SDK operation.
 class WindowDragSession::Impl {};
 
 WindowDragSession::WindowDragSession() : pimpl_(std::make_unique<Impl>()) {}

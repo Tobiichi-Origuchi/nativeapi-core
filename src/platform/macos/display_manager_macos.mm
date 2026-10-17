@@ -33,8 +33,8 @@ DisplayManager::~DisplayManager() {
   }
 }
 
-std::vector<DisplayManager::NativeDisplayInfo> DisplayManager::EnumerateNativeDisplays() {
-  std::vector<NativeDisplayInfo> natives;
+bool DisplayManager::EnumerateNativeDisplays(std::vector<NativeDisplayInfo>& natives) {
+  natives.clear();
   NSArray<NSScreen*>* screens = [NSScreen screens];
   bool isPrimary = true;  // Only the first NSScreen is the primary display
   for (NSScreen* screen in screens) {
@@ -43,7 +43,7 @@ std::vector<DisplayManager::NativeDisplayInfo> DisplayManager::EnumerateNativeDi
     natives.push_back({std::to_string(displayID), (__bridge void*)screen, isPrimary});
     isPrimary = false;
   }
-  return natives;
+  return true;
 }
 
 Point DisplayManager::GetCursorPosition() {
@@ -57,5 +57,8 @@ Point DisplayManager::GetCursorPosition() {
   point.y = topLeftPoint.y;
   return point;
 }
+
+void DisplayManager::StartEventListening() {}
+void DisplayManager::StopEventListening() {}
 
 }  // namespace nativeapi

@@ -93,6 +93,42 @@ void WindowPropertyDispatch::Refresh(const Window& window) {
   }
 }
 
+void WindowPropertyDispatch::PrimeControlButtons(const Window& window) {
+  const auto id = window.GetId();
+  if (id == IdAllocator::kInvalidId) return;
+  auto now = Read(window);
+  const bool visible = now.control_buttons_visible;
+  std::lock_guard<std::mutex> lock(g_mutex);
+  auto [entry, inserted] = Store().try_emplace(id, std::move(now));
+  if (!inserted) entry->second.control_buttons_visible = visible;
+}
+
+void WindowPropertyDispatch::RefreshControlButtons(const Window& window) {
+  if (g_scope_depth > 0) return;
+  const auto id = window.GetId();
+  if (id == IdAllocator::kInvalidId) return;
+  const bool visible = window.IsWindowControlButtonsVisible();
+  bool missing = false;
+  {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    const auto entry = Store().find(id);
+    missing = entry == Store().end();
+    if (!missing) {
+      if (entry->second.control_buttons_visible == visible) return;
+      entry->second.control_buttons_visible = visible;
+    }
+  }
+  if (missing) {
+    Refresh(window);
+    return;
+  }
+  try {
+    WindowManager::GetInstance().DispatchWindowEvent(
+        WindowPropertyChangedEvent(id, WindowProperty::WindowControlButtonsVisible));
+  } catch (...) {
+  }
+}
+
 void WindowPropertyDispatch::RefreshOcclusion(const Window& window) {
   const WindowId id = window.GetId();
   if (id == IdAllocator::kInvalidId) return;

@@ -58,7 +58,16 @@ class MessageDialog : public Dialog {
   MessageDialog(MessageDialog&&) = delete;
   MessageDialog& operator=(MessageDialog&&) = delete;
 
-  /** Extended controls currently require the Windows WinUI3 backend. */
+  /**
+   * @brief Whether the native backend supports the extended dialog controls.
+   * @note Platform availability:
+   * - macOS: ❌ Not supported.
+   * - Windows: ✅ WinUI3 backend.
+   * - Linux: ❌ Not supported.
+   * - Android: ❌ Not supported.
+   * - iOS: ❌ Not supported.
+   * - OpenHarmony: ✅ Native ArkUI controls after UI host initialization; API 23+.
+   */
   static bool IsExtendedSupported();
   /** Empty labels hide buttons. At least one label must be nonempty. Configure before Open. */
   bool SetButtons(const std::string& primary, const std::string& secondary,
@@ -129,6 +138,13 @@ class MessageDialog : public Dialog {
    * @brief Open the dialog.
    *
    * Displays the dialog according to the current modality setting.
+   *
+   * @note OpenHarmony requires an initialized UI host and an attached, visible
+   * parent window (the current window is used when no parent is set). Non-modal
+   * Open returns immediately. Modal Open blocks its calling worker until native
+   * dismissal; calling it on the ArkTS UI thread returns false because that thread
+   * must keep processing events. Application modality covers windows attached to
+   * this nativeapi instance, including windows attached while the dialog is open.
    *
    * @return true if the dialog was successfully opened, false otherwise
    */

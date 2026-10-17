@@ -29,6 +29,10 @@ namespace nativeapi {
  * - Thread-safe access to the singleton instance
  * - Automatic cleanup of resources on destruction
  *
+ * @note OpenHarmony manages only windows attached by its ArkTS host. GetCurrent()
+ *       prefers the focused attached window, falling back to the main window.
+ *       Native destruction removes the window from enumeration and lookup.
+ *
  * @note This class is thread-safe for singleton access, but individual operations
  *       may require additional synchronization depending on the platform implementation.
  */
@@ -138,6 +142,12 @@ class WindowManager : public EventEmitter<WindowEvent> {
    * @note On Wayland other applications' windows are not visible to the
    *       process, and the stacking order of this application's own windows
    *       is approximated with the focused window first.
+   *       OHOS sees only attached process windows. Workers wait for the public
+   *       SDK's current visible-window stack. UI callers submit a nonblocking
+   *       refresh and use the last completed stack; before the first successful
+   *       result, observed show/focus order is used. SDK failure retains the last
+   *       completed order (or that initial fallback). Other applications are not
+   *       tested. Unattached SDK windows are not in this host's lookup registry.
    *
    * @code
    * auto session_window = session.GetWindowId();

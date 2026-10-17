@@ -63,11 +63,14 @@ int main() {
         "approved queued request still coalesces");
   drain();
   Check(actions == 1 && !state->IsPending(), "original action executes once");
-  state->Request([&] { ++actions; });
+  int rejections = 0;
+  state->Request([&] { ++actions; }, [&] { ++rejections; });
   a->Accept();
   b->Cancel();
+  Check(rejections == 0, "a native rejection reply waits for target UI dispatch");
   drain();
-  Check(actions == 1 && !state->IsPending(), "one veto stops every alias");
+  Check(actions == 1 && rejections == 1 && !state->IsPending(),
+        "one veto stops every alias and releases the native rejection reply once");
   state->Request([&] { ++actions; });
   auto old_a = a, old_b = b;
   second.reset();

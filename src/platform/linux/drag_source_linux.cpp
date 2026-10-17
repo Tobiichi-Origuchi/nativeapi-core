@@ -8,6 +8,10 @@
 #include "../../image.h"
 
 namespace nativeapi {
+
+bool DragSource::IsOperationSelectionSupported() { return true; }
+
+bool DragSource::IsPositionSupported() { return true; }
 namespace {
 
 enum TargetInfo : guint { kUriList = 0, kText = 1 };

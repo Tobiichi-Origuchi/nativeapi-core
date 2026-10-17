@@ -67,6 +67,10 @@ native_rectangle_t native_positioning_strategy_get_relative_rectangle(native_pos
 FFI_PLUGIN_EXPORT
 native_point_t native_positioning_strategy_get_relative_offset(native_positioning_strategy_t positioning_strategy);
 
+/// Caller owns the returned handle; release it with native_window_free().
+FFI_PLUGIN_EXPORT
+native_window_t native_positioning_strategy_get_relative_window(native_positioning_strategy_t positioning_strategy);
+
 /// Releases the caller's reference. Safe to call with an invalid or
 /// already-released handle.
 FFI_PLUGIN_EXPORT

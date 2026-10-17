@@ -30,19 +30,22 @@ std::shared_ptr<Shortcut> ShortcutManager::Register(const ShortcutOptions& optio
 
   // Validate accelerator format
   if (!IsValidAccelerator(options.accelerator)) {
+    lock.unlock();
     // Emit failure event
     EmitAsync<ShortcutRegistrationFailedEvent>(0, options.accelerator,
                                                "Invalid accelerator format");
     return nullptr;
   }
 
-  // Check if accelerator is already registered.
-  // NOTE: must use the *Unlocked variant — we already hold mutex_, and the
-  // check must stay atomic with the insert below.
-  if (!IsAvailableUnlocked(options.accelerator)) {
+  // Keep duplicate checking atomic with insertion. A local registration must
+  // not probe or reserve the global chord: another app may own that chord.
+  // The platform registration still validates scope, aliases and local support.
+  if (shortcuts_by_accelerator_.find(options.accelerator) != shortcuts_by_accelerator_.end() ||
+      (options.scope == ShortcutScope::Global && !pimpl_->CanRegister(options.accelerator))) {
+    lock.unlock();
     // Emit failure event
     EmitAsync<ShortcutRegistrationFailedEvent>(0, options.accelerator,
-                                               "Accelerator already registered");
+                                               "Accelerator unavailable or already registered");
     return nullptr;
   }
 
@@ -54,6 +57,7 @@ std::shared_ptr<Shortcut> ShortcutManager::Register(const ShortcutOptions& optio
 
   // Register with platform
   if (!pimpl_->RegisterShortcut(shortcut)) {
+    lock.unlock();
     // Platform registration failed
     EmitAsync<ShortcutRegistrationFailedEvent>(id, options.accelerator,
                                                "Platform registration failed");
@@ -83,7 +87,7 @@ bool ShortcutManager::Unregister(ShortcutId id) {
   std::string accelerator = shortcut->GetAccelerator();
 
   // Unregister from platform
-  pimpl_->UnregisterShortcut(shortcut);
+  if (!pimpl_->UnregisterShortcut(shortcut)) return false;
 
   // Remove from registries
   shortcuts_by_id_.erase(it);
@@ -195,7 +199,8 @@ bool ShortcutManager::IsAvailable(const std::string& accelerator) {
 
 // Availability check for callers that already hold mutex_.
 bool ShortcutManager::IsAvailableUnlocked(const std::string& accelerator) const {
-  return shortcuts_by_accelerator_.find(accelerator) == shortcuts_by_accelerator_.end();
+  return shortcuts_by_accelerator_.find(accelerator) == shortcuts_by_accelerator_.end() &&
+         pimpl_->CanRegister(accelerator);
 }
 
 // Validate accelerator format

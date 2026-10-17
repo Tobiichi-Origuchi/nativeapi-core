@@ -42,6 +42,24 @@ bool native_drag_source_is_supported(void) {
   }
 }
 
+bool native_drag_source_is_position_supported(void) {
+  try {
+    return nativeapi::DragSource::IsPositionSupported();
+  } catch (...) {
+    fprintf(stderr, "[nativeapi] %s: unexpected exception\n", "native_drag_source_is_position_supported");
+    return false;
+  }
+}
+
+bool native_drag_source_is_operation_selection_supported(void) {
+  try {
+    return nativeapi::DragSource::IsOperationSelectionSupported();
+  } catch (...) {
+    fprintf(stderr, "[nativeapi] %s: unexpected exception\n", "native_drag_source_is_operation_selection_supported");
+    return false;
+  }
+}
+
 void native_drag_source_set_file_paths(native_drag_source_t drag_source, native_string_list_t file_paths) {
   auto self = nativeapi::HandleTable::GetInstance().Resolve<nativeapi::DragSource>(drag_source);
   if (!self) {

@@ -50,6 +50,12 @@ class TrayManager {
    * functionality. This method allows checking for availability before
    * attempting to create tray icons.
    *
+   * On HarmonyOS this requires the attached UIAbilityContext and the public HMS
+   * StatusBarManager system capability. It reports service availability, while
+   * registration can still be refused by the SDK. Phone profiles return false.
+   * Get/GetAll enumerate this library's live tray identities, including hidden
+   * ones; they do not enumerate another application's system icons.
+   *
    * @return true if system tray is supported, false otherwise
    */
   bool IsSupported();

@@ -30,7 +30,9 @@ class WindowCloseState : public std::enable_shared_from_this<WindowCloseState> {
   bool IsAlive() const;
   bool IsPending() const;
   // Must start on target UI. Completion may arrive from any worker.
-  bool Request(std::function<void()> action);
+  // Rejected runs on the target UI thread after a cancellable vote is denied.
+  // Native hosts with an asynchronous close reply use it to release that reply.
+  bool Request(std::function<void()> action, std::function<void()> rejected = {});
   bool DispatchTask(std::function<void()> task);
   void NotifyRequired();
   void Invalidate(bool native_destroyed = true);

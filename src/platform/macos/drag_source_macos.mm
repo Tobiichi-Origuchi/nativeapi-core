@@ -8,6 +8,10 @@
 
 namespace nativeapi {
 
+bool DragSource::IsOperationSelectionSupported() { return true; }
+
+bool DragSource::IsPositionSupported() { return true; }
+
 // What the delegate reports to; implemented by DragSource::Impl::Platform.
 class DragSourceDelegateHandler {
  public:

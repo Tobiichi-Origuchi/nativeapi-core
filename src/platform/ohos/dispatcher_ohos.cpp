@@ -1,5 +1,6 @@
-#include "../../foundation/dispatcher_platform.h"
 #include "../../foundation/dispatcher_common.h"
+#include "../../foundation/dispatcher_platform.h"
+#include "ohos_runtime.h"
 
 namespace nativeapi {
 namespace dispatcher_platform {
@@ -13,16 +14,11 @@ void PlatformSetMainThread() {
 }
 
 bool PlatformIsMainThreadDispatchSupported() {
-  return false;
+  return ohos::IsInitialized();
 }
 
 bool PlatformRunOnMainThread(std::function<void()> fn) {
-  // TODO(ohos): implement via the ArkUI event handler / OH_Napi thread-safe
-  // function, whichever the surrounding app model provides.
-  //
-  // Returning false rather than dropping silently — see the Android note.
-  (void)fn;
-  return false;
+  return ohos::Post(std::move(fn));
 }
 
 bool PlatformRunMainThreadLoopFor(int timeout_ms) {

@@ -211,8 +211,8 @@ class TextFieldSubmittedEvent : public ViewEvent {
  *
  * Ownership follows the tree: a parent keeps its subviews alive, a subview
  * refers to its parent weakly. Destroying a view created by this library
- * destroys its native control; a root view wraps the window's own content
- * view and leaves it alone.
+ * destroys its native control. A window's root view preserves the host-owned
+ * content view; OpenHarmony mounts its own native tree inside a host-owned slot.
  *
  * @note Every method must be called on the main thread. Events are emitted
  * synchronously from the platform callback.
@@ -223,7 +223,9 @@ class TextFieldSubmittedEvent : public ViewEvent {
  * - Linux: ✅ Fully supported - GTK 3 widgets
  * - Android: ❌ Not applicable - IsSupported() is false, every call is ignored
  * - iOS: ❌ Not applicable - IsSupported() is false, every call is ignored
- * - OpenHarmony: ❌ Not applicable - IsSupported() is false, every call is ignored
+ * - OpenHarmony: ⚠️ Native ArkUI controls on the initialized ArkTS UI thread;
+ *   the host must attach a ContentSlot to its window. Tooltips are stored only.
+ *   Password input is single-line; secure and multiline cannot be combined.
  *
  * @example
  * ```cpp
@@ -254,8 +256,9 @@ class View : public EventEmitter<ViewEvent>,
   /**
    * @brief Checks if views are available on this platform.
    *
-   * @return false on Android, iOS and OpenHarmony, where every View method
-   *         is a no-op and Window::GetContentView() returns nullptr.
+   * @return false on Android and iOS. On OpenHarmony, requires the initialized
+   *         ArkTS UI thread and the native ArkUI node API; creating views also
+   *         requires an attached host window and its UI context.
    */
   static bool IsSupported();
 
@@ -293,7 +296,8 @@ class View : public EventEmitter<ViewEvent>,
   /**
    * @brief Wraps an existing native view without taking ownership.
    *
-   * @param native_view NSView* on macOS, HWND on Windows, GtkWidget* on Linux.
+   * @param native_view NSView* on macOS, HWND on Windows, GtkWidget* on Linux,
+   *        ArkUI_NodeHandle on OpenHarmony (owning ArkTS UI thread only).
    *        Used by Window for its root view.
    */
   explicit View(void* native_view);
@@ -564,7 +568,7 @@ class View : public EventEmitter<ViewEvent>,
    * - Linux: ⚠️ Applied through a CSS provider - The theme may override it
    * - Android: ❌ Not applicable - Always ignored
    * - iOS: ❌ Not applicable - Always ignored
-   * - OpenHarmony: ❌ Not applicable - Always ignored
+   * - OpenHarmony: ✅ Native ArkUI background colour; zero alpha resets the attribute.
    */
   void SetBackgroundColor(Color color);
 
@@ -579,6 +583,16 @@ class View : public EventEmitter<ViewEvent>,
    * @brief Sets the tooltip shown when the pointer rests on the view.
    *
    * @param tooltip The text, or std::nullopt for none.
+   * @note Platform availability:
+   * - macOS: ✅ Native view tooltip.
+   * - Windows: ✅ Native tooltip for the selected view backend.
+   * - Linux: ✅ GTK tooltip.
+   * - Android: ❌ Stores the value without displaying it.
+   * - iOS: ❌ Stores the value without displaying it.
+   * - OpenHarmony: ⚠️ Native hover events and an API 18+ nonmodal SDK popup.
+   *   The ContentSlot host must supply the companion NativeTooltipHost adapter.
+   *   Empty text or std::nullopt clears the display. Calls require the owning UI
+   *   thread. Hidden/disabled/detached views do not show pending tips.
    */
   void SetTooltip(const std::optional<std::string>& tooltip);
 
@@ -842,6 +856,8 @@ class TextField : public View {
    * @brief Sets password entry: the glyphs are masked.
    *
    * @param is_secure true to mask the text.
+   * @note OpenHarmony ignores this call on a multi-line field; its public
+   *       TextArea input types do not include password entry.
    */
   void SetSecure(bool is_secure);
 
@@ -857,6 +873,9 @@ class TextField : public View {
    * emitting TextFieldSubmittedEvent.
    *
    * @param is_multiline true for a multi-line field.
+   * @note OpenHarmony ignores enabling multi-line while secure input is active.
+   *       Otherwise it replaces the native input node, preserving the View id,
+   *       text, appearance and tree position. Native focus and selection reset.
    */
   void SetMultiline(bool is_multiline);
 

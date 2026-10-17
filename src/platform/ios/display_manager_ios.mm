@@ -14,8 +14,8 @@ DisplayManager::DisplayManager() {
 
 DisplayManager::~DisplayManager() {}
 
-std::vector<DisplayManager::NativeDisplayInfo> DisplayManager::EnumerateNativeDisplays() {
-  std::vector<NativeDisplayInfo> natives;
+bool DisplayManager::EnumerateNativeDisplays(std::vector<NativeDisplayInfo>& natives) {
+  natives.clear();
 
   UIScreen* mainScreen = [UIScreen mainScreen];
   NSArray<UIScreen*>* screens = [UIScreen screens];
@@ -32,12 +32,15 @@ std::vector<DisplayManager::NativeDisplayInfo> DisplayManager::EnumerateNativeDi
                        (__bridge void*)mainScreen, true});
   }
 
-  return natives;
+  return true;
 }
 
 Point DisplayManager::GetCursorPosition() {
   // iOS doesn't have a cursor position concept
   return Point{0, 0};
 }
+
+void DisplayManager::StartEventListening() {}
+void DisplayManager::StopEventListening() {}
 
 }  // namespace nativeapi

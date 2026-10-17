@@ -17,10 +17,20 @@ class NotificationActivatedEvent : public NotificationEvent {
   std::string argument_;
 };
 
-/** System notifications. Windows App SDK backend requires NATIVEAPI_ENABLE_WINUI3.
- * Subscribe before Initialize(), including on notification-triggered app launches.
- * Methods run on the main STA; activation events are delivered on the main dispatcher.
- * IsSupported reports build support, not runtime installation or notification settings.
+/** System notifications. Subscribe before Initialize(), including cold launches.
+ * Activation events are delivered on the main dispatcher. Capability does not
+ * imply that notification settings allow delivery or that banners will appear.
+ *
+ * @note Platform availability:
+ * - macOS: ❌ Not implemented.
+ * - Windows: ✅ Windows App SDK with NATIVEAPI_ENABLE_WINUI3; main STA calls.
+ * - Linux: ❌ Not implemented.
+ * - Android: ❌ Not implemented in this native layer.
+ * - iOS: ❌ Not implemented.
+ * - OpenHarmony: ✅ Public notificationManager and WantAgent APIs after host
+ *   initialization/context attachment. Forward onCreate/onNewWant through the
+ *   private OHOS bridge. Initialize/Show/Remove require a worker and the running
+ *   ArkTS UI loop. Initialize requests user authorization when necessary.
  */
 class NotificationManager : public EventEmitter<NotificationEvent> {
  public:
@@ -31,12 +41,17 @@ class NotificationManager : public EventEmitter<NotificationEvent> {
   NotificationManager(NotificationManager&&) = delete;
   NotificationManager& operator=(NotificationManager&&) = delete;
   static bool IsSupported();
-  /** Registers this process with Windows. Call once at application startup. */
+  /** Registers activation delivery. Call at application startup, after subscribing.
+   * OpenHarmony waits for actual authorization completion; denial returns false.
+   */
   bool Initialize();
   /** Release registration before stopping the UI loop. Delivered notifications remain. */
   void Shutdown();
-  /** Uses tag to replace an existing notification. Optional button emits action=button.
-   * True means accepted by the OS; notification settings may suppress the banner.
+  /** Uses tag to replace an existing notification. Activation argument is
+   * tag=<encoded tag>&action=open or action=button. The optional button uses the
+   * latter. OpenHarmony tags contain 1-192 UTF-8 bytes without NUL; title/message
+   * must be nonempty. SDK display-length limits apply. True means accepted by
+   * the OS; notification settings may suppress the banner.
    */
   bool Show(const std::string& title, const std::string& message,
             const std::string& tag, const std::string& button_label);

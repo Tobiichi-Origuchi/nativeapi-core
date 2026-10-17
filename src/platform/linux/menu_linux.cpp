@@ -694,7 +694,7 @@ bool Menu::Open(const PositioningStrategy& strategy, Placement placement) {
   // Get GdkWindow from relative window if available, otherwise use root window
   GdkWindow* gdk_window = nullptr;
   GtkWindow* relative_gtk_window = nullptr;
-  const Window* relative_window = strategy.GetRelativeWindow();
+  auto relative_window = strategy.GetRelativeWindow();
   if (relative_window) {
     // Window::GetNativeObject() hands out the toplevel GtkWidget*, not its GdkWindow:
     // passing it straight to a gdk_window_* call crashes.

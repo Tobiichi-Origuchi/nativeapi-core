@@ -74,6 +74,12 @@ FFI_PLUGIN_EXPORT
 bool native_drag_source_is_supported(void);
 
 FFI_PLUGIN_EXPORT
+bool native_drag_source_is_position_supported(void);
+
+FFI_PLUGIN_EXPORT
+bool native_drag_source_is_operation_selection_supported(void);
+
+FFI_PLUGIN_EXPORT
 void native_drag_source_set_file_paths(native_drag_source_t drag_source, native_string_list_t file_paths);
 
 FFI_PLUGIN_EXPORT

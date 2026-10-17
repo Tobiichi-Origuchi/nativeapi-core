@@ -11,8 +11,8 @@ namespace nativeapi {
  * DeviceInfo answers "what is this machine": its user-visible name, hardware
  * model, and operating system. It deliberately excludes dynamic resource
  * metrics (CPU load, memory) and any unique machine identifier. Values are
- * read from the platform on every call; a getter whose value the platform
- * cannot provide returns an empty string.
+ * queried on every call, except immutable process/build architecture data.
+ * A getter whose value the platform cannot provide returns an empty string.
  *
  * Typical usage:
  * @code
@@ -32,10 +32,16 @@ class DeviceInfo {
   /**
    * @brief Get the user-visible device name.
    *
+   * @note Platform availability:
    * - macOS: the computer name, e.g. "Jerry's MacBook Pro"
    * - Windows: the computer's DNS host name
    * - Linux: the host name
+   * - Android: unavailable from this native layer (returns an empty string)
    * - iOS: the device name from UIDevice
+   * - OHOS: the current user-assigned Settings device name when an initialized
+   *   UI host/context is attached and the public SDK read succeeds. Before host
+   *   attachment, or if that name is unavailable/empty, the product market name
+   *   is returned instead. Workers marshal the Settings read to the host UI.
    *
    * @return The device name, or "" if unavailable.
    */
@@ -47,6 +53,7 @@ class DeviceInfo {
    * - macOS / iOS: e.g. "MacBookPro18,1" / "iPhone15,2"
    * - Windows / Linux: the SMBIOS product name, e.g. "XPS 13 9310"
    * - Android: e.g. "Pixel 7 Pro"
+   * - OHOS: the public deviceinfo product model, which can be "emulator".
    *
    * @return The model, or "" if unavailable.
    */
@@ -64,6 +71,8 @@ class DeviceInfo {
    *
    * E.g. "macOS", "Windows", "Ubuntu", "iOS", "Android", "OpenHarmony".
    * On Linux this is the distribution name from /etc/os-release.
+   * On OHOS this is the SDK distribution name; an unavailable name stays empty
+   * rather than being replaced with another operating system's name.
    *
    * @return The OS name, or "" if unavailable.
    */
@@ -72,6 +81,9 @@ class DeviceInfo {
   /**
    * @brief Get the operating system version, e.g. "14.5" or "10.0.22631".
    *
+   * On OHOS this is the SDK distribution version, falling back to the actual
+   * SDK full OS name if the distribution version is unavailable.
+   *
    * @return The OS version, or "" if unavailable.
    */
   std::string GetOsVersion() const;
@@ -79,7 +91,7 @@ class DeviceInfo {
   /**
    * @brief Get the kernel version.
    *
-   * - macOS / iOS / Linux / Android: the uname release, e.g. "23.5.0"
+   * - macOS / iOS / Linux / Android / OHOS: the uname release, e.g. "23.5.0"
    * - Windows: same as GetOsVersion()
    *
    * @return The kernel version, or "" if unavailable.
@@ -90,6 +102,17 @@ class DeviceInfo {
    * @brief Get the processor architecture of the running process.
    *
    * E.g. "arm64", "x86_64".
+   *
+   * @note Platform availability:
+   * - macOS: uname machine; OS-reported architecture may reflect translation.
+   * - Windows: native system architecture from GetNativeSystemInfo, which can
+   *   differ from this process under compatibility/emulation.
+   * - Linux: uname machine, which may differ from the process ABI.
+   * - Android: uname machine, which may differ from the process ABI.
+   * - iOS: compiler target architecture (arm64/x86_64); unknown targets return empty.
+   * - OHOS: compiler target architecture (aarch64/x86_64/arm/i686), independent
+   *   of the kernel's machine value or supported ABI list. Unknown targets
+   *   return empty. This describes the running library's process ABI.
    *
    * @return The architecture, or "" if unavailable.
    */

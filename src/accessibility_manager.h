@@ -22,6 +22,15 @@ namespace nativeapi {
  * manager.Enable();
  * bool enabled = manager.IsEnabled();
  * @endcode
+ *
+ * @note Platform availability:
+ * - macOS: ✅ Requests and queries this process's Accessibility trust.
+ * - Windows: ⚠️ Enable is a no-op; IsEnabled currently reports true.
+ * - Linux: ⚠️ Initializes GTK; queries AT-SPI/environment/Orca heuristics.
+ * - Android: ❌ Legacy local flag only; does not enable a system service.
+ * - iOS: ❌ Legacy local flag only; does not enable a system service.
+ * - OpenHarmony: ⚠️ Queries enabled system accessibility extensions; Enable is
+ *   unavailable to normal applications and is a no-op.
  */
 class AccessibilityManager {
  public:
@@ -54,6 +63,9 @@ class AccessibilityManager {
    *
    * @note This operation may require system permissions depending on the
    *       platform implementation.
+   * @note On OpenHarmony this is a no-op: enabling an accessibility extension
+   * requires a system-only API and WRITE_ACCESSIBILITY_CONFIG. Calling this
+   * method does not change the state reported by IsEnabled().
    */
   void Enable();
 
@@ -63,6 +75,11 @@ class AccessibilityManager {
    *
    * This method provides a quick way to query the current state of
    * accessibility features without modifying the system state.
+   * @note On OpenHarmony this queries whether any accessibility extension is
+   * enabled in the system, through isOpenAccessibilitySync. It requires the
+   * initialized ArkTS UI environment; worker calls marshal to that environment.
+   * Before initialization or if the SDK query fails, it returns false. This is
+   * distinct from screen-reader, touch-guide or application trust status.
    */
   bool IsEnabled();
 

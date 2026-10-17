@@ -1,0 +1,13 @@
+/.hvigor/
+/oh_modules/
+/build/
+/test-results/
+/entry/.cxx/
+/entry/build/
+/entry/oh_modules/
+/local.properties
+/oh-package-lock.json5
+
+/__pycache__/
+
+/entry/src/main/ets/nativeapi/

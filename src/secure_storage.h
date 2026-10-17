@@ -11,12 +11,19 @@ namespace nativeapi {
  * Similar to Web Storage's encrypted storage, this provides secure persistent
  * storage for sensitive application data. Data is encrypted at rest.
  *
- * Platform implementations:
- * - Windows: Credential Manager (Windows Data Protection API)
- * - macOS: Keychain Services
- * - Linux: libsecret (GNOME Keyring) or encrypted files
- *
- * @warning This is a stub implementation. Actual encryption is not yet implemented.
+ * @note Platform availability:
+ * - macOS: ❌ Not implemented
+ * - Windows: ❌ Not implemented
+ * - Linux: ❌ Not implemented
+ * - Android: ❌ Not implemented
+ * - iOS: ❌ Not implemented
+ * - OpenHarmony: ✅ Public ASSET encrypted storage, isolated by application and scope.
+ *   Available after the device's first unlock. Assets are removed on app uninstall.
+ *   Values are at most 1023 bytes; an internal format byte encodes empty strings.
+ *   The namespaced scope/key alias must fit the native 256-byte limit. Scope/key
+ *   embedded NUL is rejected. Scope/key metadata is not encrypted; values are.
+ *   Invalid inputs fail before replacing existing assets. SDK failures return
+ *   false, defaults or empty collections; plaintext storage is never used.
  */
 class SecureStorage : public Storage {
  public:

@@ -22,8 +22,8 @@ DisplayManager::~DisplayManager() {
   // TODO: Clean up display change monitoring
 }
 
-std::vector<DisplayManager::NativeDisplayInfo> DisplayManager::EnumerateNativeDisplays() {
-  std::vector<NativeDisplayInfo> natives;
+bool DisplayManager::EnumerateNativeDisplays(std::vector<NativeDisplayInfo>& natives) {
+  natives.clear();
   auto enumProc = [](HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor,
                      LPARAM dwData) -> BOOL {
     auto* out = reinterpret_cast<std::vector<NativeDisplayInfo>*>(dwData);
@@ -31,17 +31,16 @@ std::vector<DisplayManager::NativeDisplayInfo> DisplayManager::EnumerateNativeDi
     MONITORINFOEXW monitorInfo;
     monitorInfo.cbSize = sizeof(MONITORINFOEXW);
 
-    if (GetMonitorInfoW(hMonitor, &monitorInfo)) {
-      bool isPrimary = (monitorInfo.dwFlags & MONITORINFOF_PRIMARY) != 0;
-      // The device name is stable across configuration changes, unlike the
-      // HMONITOR value, so it serves as the identity key.
-      out->push_back({WCharArrayToString(monitorInfo.szDevice), hMonitor, isPrimary});
-    }
+    if (!GetMonitorInfoW(hMonitor, &monitorInfo))
+      return FALSE;
+    bool isPrimary = (monitorInfo.dwFlags & MONITORINFOF_PRIMARY) != 0;
+    // The device name is stable across configuration changes, unlike the
+    // HMONITOR value, so it serves as the identity key.
+    out->push_back({WCharArrayToString(monitorInfo.szDevice), hMonitor, isPrimary});
 
     return TRUE;
   };
-  EnumDisplayMonitors(nullptr, nullptr, enumProc, reinterpret_cast<LPARAM>(&natives));
-  return natives;
+  return EnumDisplayMonitors(nullptr, nullptr, enumProc, reinterpret_cast<LPARAM>(&natives)) != FALSE;
 }
 
 Point DisplayManager::GetCursorPosition() {
@@ -51,5 +50,8 @@ Point DisplayManager::GetCursorPosition() {
   }
   return {0.0, 0.0};
 }
+
+void DisplayManager::StartEventListening() {}
+void DisplayManager::StopEventListening() {}
 
 }  // namespace nativeapi

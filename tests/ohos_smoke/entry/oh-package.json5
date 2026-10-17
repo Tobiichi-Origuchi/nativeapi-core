@@ -1,0 +1,8 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "dependencies": {
+    "libnativeapi_smoke.so": "file:./src/main/cpp/types/libnativeapi_smoke",
+    "libnativeapi_clipboard_lifetime.so": "file:./src/main/cpp/types/libnativeapi_clipboard_lifetime"
+  }
+}

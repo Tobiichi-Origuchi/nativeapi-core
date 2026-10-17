@@ -6,6 +6,11 @@ add_executable(window_shape_test window_shape_test.cpp)
 target_link_libraries(window_shape_test PRIVATE nativeapi)
 add_test(NAME window_shape_test COMMAND window_shape_test)
 
+# SDK-independent polygon/raster math; no window/input or OHOS headers required.
+add_executable(ohos_window_mask_test ohos_window_mask_test.cpp)
+target_link_libraries(ohos_window_mask_test PRIVATE nativeapi)
+add_test(NAME ohos_window_mask_test COMMAND ohos_window_mask_test)
+
 add_executable(view_layout_test view_layout_test.cpp)
 target_link_libraries(view_layout_test PRIVATE nativeapi)
 add_test(NAME view_layout_test COMMAND view_layout_test)
@@ -482,3 +487,30 @@ if(ANDROID)
   target_compile_definitions(clipboard_android_writer PRIVATE NATIVEAPI_CLIPBOARD_WRITER=1)
   target_link_libraries(clipboard_android_writer PRIVATE nativeapi)
 endif()
+
+# Controlled platform seam: distinguish an enumeration error from an empty topology.
+add_executable(display_enumeration_failure_test
+  display_enumeration_failure_test.cpp ../src/display_manager.cpp)
+target_compile_features(display_enumeration_failure_test PRIVATE cxx_std_17)
+find_package(Threads REQUIRED)
+target_link_libraries(display_enumeration_failure_test PRIVATE Threads::Threads)
+add_test(NAME display_enumeration_failure_test COMMAND display_enumeration_failure_test)
+
+# Backend refusal must preserve the public registration so removal can be retried.
+add_executable(shortcut_unregister_failure_test
+  shortcut_unregister_failure_test.cpp ../src/shortcut_manager.cpp ../src/shortcut.cpp)
+target_compile_features(shortcut_unregister_failure_test PRIVATE cxx_std_17)
+target_link_libraries(shortcut_unregister_failure_test PRIVATE Threads::Threads)
+add_test(NAME shortcut_unregister_failure_test COMMAND shortcut_unregister_failure_test)
+set_tests_properties(shortcut_unregister_failure_test PROPERTIES TIMEOUT 10)
+
+# Shared value/ABI contract suite; also executed inside both OHOS guest types.
+add_executable(foundation_values_test foundation_values_test.cpp)
+target_link_libraries(foundation_values_test PRIVATE nativeapi Threads::Threads)
+add_test(NAME foundation_values_test COMMAND foundation_values_test)
+set_tests_properties(foundation_values_test PROPERTIES TIMEOUT 20)
+
+# Public-SDK shadow image math, including shape clipping and straight RGBA.
+add_executable(ohos_shadow_raster_test ohos_shadow_raster_test.cpp)
+target_link_libraries(ohos_shadow_raster_test PRIVATE nativeapi)
+add_test(NAME ohos_shadow_raster_test COMMAND ohos_shadow_raster_test)

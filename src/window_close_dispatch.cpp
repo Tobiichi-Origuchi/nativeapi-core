@@ -17,6 +17,7 @@ WindowEventRegistration::~WindowEventRegistration() {
 struct WindowCloseState::Attempt {
   std::shared_ptr<EventRequest> request;
   std::function<void()> action;
+  std::function<void()> rejected;
   std::atomic<bool> dispatch_failed{false};
 };
 namespace {
@@ -113,7 +114,7 @@ void WindowCloseState::EmitObserved(const WindowEvent& event) {
   if (failure)
     std::rethrow_exception(failure);
 }
-bool WindowCloseState::Request(std::function<void()> action) try {
+bool WindowCloseState::Request(std::function<void()> action, std::function<void()> rejected) try {
   if (!IsAlive() || !valid_())
     return false;
   if (IsPending()) {
@@ -128,6 +129,7 @@ bool WindowCloseState::Request(std::function<void()> action) try {
   }
   auto attempt = std::make_shared<Attempt>();
   attempt->action = std::move(action);
+  attempt->rejected = std::move(rejected);
   std::weak_ptr<WindowCloseState> weak = shared_from_this();
   std::weak_ptr<Attempt> weak_attempt = attempt;
   attempt->request = EventRequestDispatch::Create(true, [weak, weak_attempt](bool accepted) {
@@ -177,6 +179,8 @@ void WindowCloseState::Complete(const std::shared_ptr<Attempt>& attempt, bool ac
   try {
     if (accepted && valid_())
       attempt->action();
+    else if (attempt->rejected)
+      attempt->rejected();
   } catch (...) {
   }
   {

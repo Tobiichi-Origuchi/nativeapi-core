@@ -578,7 +578,7 @@ class ShortcutRegistrationFailedEvent : public ShortcutEvent {
  * - Linux: ❌ Not emitted; global hotkeys report activation only.
  * - Android: ❌ Global shortcuts are unsupported.
  * - iOS: ❌ Global shortcuts are unsupported.
- * - OHOS: ❌ Global shortcuts are unsupported.
+ * - OHOS: ❌ Public global hotkeys report activation only.
  */
 class ShortcutReleasedEvent : public ShortcutEvent {
  public:

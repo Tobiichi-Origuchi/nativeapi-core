@@ -110,6 +110,8 @@ class Image : public NativeObjectProvider {
    *       - macOS: PNG, JPEG, GIF, TIFF, BMP, ICO, PDF
    *       - Windows: PNG, JPEG, BMP, GIF, TIFF, ICO
    *       - Linux: PNG, JPEG, BMP, GIF, SVG, XPM (depends on system libraries)
+   *       - OpenHarmony: public Image NDK codecs; the first frame of an encoded image.
+   *         Format comes from native decoded source information, not the extension.
    *
    * @example
    * ```cpp
@@ -189,7 +191,9 @@ class Image : public NativeObjectProvider {
    * @return true if saved successfully, false otherwise
    *
    * @note Supported output formats depend on the platform but typically
-   *       include PNG, JPEG, BMP, and TIFF.
+   *       include PNG, JPEG, BMP, and TIFF. OpenHarmony output uses the SDK encoder
+   *       for the selected extension; PNG, JPEG and WebP are verified on its emulators.
+   *       Unsupported codecs or inaccessible paths return false.
    *
    * @example
    * ```cpp

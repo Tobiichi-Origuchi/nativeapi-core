@@ -210,11 +210,18 @@ class MenuItemSubmenuClosedEvent : public MenuEvent {
  * platforms. It also inherits from EventEmitter to provide event-driven
  * interaction handling.
  *
+ * @note On OpenHarmony, use on the initialized ArkTS UI thread. Presentation
+ * requires the companion NativeMenuHost attached to the owning window. State
+ * changes are application-controlled; native clicks do not toggle the model.
+ * Ctrl/Shift/Alt accelerators are bound while the menu exists; other modifier
+ * combinations are displayed without binding. Mixed state displays a dash.
+ * Native object tokens are opaque bridge identities, not ArkUI_NodeHandles.
+ *
  * @example
  * ```cpp
  * // Create a normal menu item
  * auto item = std::make_shared<MenuItem>("Open File", MenuItemType::Normal);
- * item->SetIcon("data:image/png;base64,...");
+ * item->SetIcon(Image::FromBase64("data:image/png;base64,..."));
  * item->SetAccelerator(KeyboardAccelerator("O", ModifierKey::Ctrl));
  * item->AddListener<MenuItemClickedEvent>([](const MenuItemClickedEvent& event)
  * {
@@ -326,10 +333,6 @@ class MenuItem : public EventEmitter<MenuEvent>, public NativeObjectProvider {
    *
    * // Using base64 data
    * auto icon = Image::FromBase64("data:image/png;base64,iVBORw0KGgo...");
-   * item->SetIcon(icon);
-   *
-   * // Using system icon
-   * auto icon = Image::FromSystemIcon("folder");
    * item->SetIcon(icon);
    *
    * // Clear icon
@@ -509,6 +512,16 @@ class MenuItem : public EventEmitter<MenuEvent>, public NativeObjectProvider {
  * platforms. It also inherits from EventEmitter to provide event-driven
  * interaction handling.
  *
+ * @note Platform availability:
+ * - macOS: ✅ Native AppKit menus.
+ * - Windows: ✅ Native Win32 menus or the optional WinUI3 backend.
+ * - Linux: ✅ Native GTK menus.
+ * - Android: ❌ Menu presentation is not implemented.
+ * - iOS: ❌ Menu presentation is not implemented.
+ * - OpenHarmony: ⚠️ Native ArkUI Menu/MenuItem components through the companion
+ *   host adapter, on the initialized ArkTS UI thread. Absolute and rectangle /
+ *   window-relative anchors are supported. Cursor-position queries remain open.
+ *
  * @example
  * ```cpp
  * // Create a file menu
@@ -534,7 +547,7 @@ class MenuItem : public EventEmitter<MenuEvent>, public NativeObjectProvider {
  * });
  *
  * // Open as context menu
- * file_menu->Open(100, 100);
+ * file_menu->Open(PositioningStrategy::Absolute({100, 100}));
  * ```
  */
 class Menu : public EventEmitter<MenuEvent>, public NativeObjectProvider {
@@ -715,6 +728,11 @@ class Menu : public EventEmitter<MenuEvent>, public NativeObjectProvider {
    * @param strategy The positioning strategy determining where to display the menu
    * @param placement The placement option determining how the menu is positioned
    *                  relative to the reference point (default: BottomStart)
+   * @note OpenHarmony returns true when presentation is submitted; it does not
+   * block the UI thread. MenuOpenedEvent reports actual native appearance.
+   * Missing host attachment, invalid anchors, cursor positioning and duplicate
+   * presentation return false. Placement may flip or clamp at native bounds.
+   *
    * @return true if the menu was successfully opened, false otherwise
    *
    * @example
@@ -738,6 +756,9 @@ class Menu : public EventEmitter<MenuEvent>, public NativeObjectProvider {
   /**
    * @brief Programmatically close the menu if it's currently showing.
    *
+   * @note OpenHarmony returns true when closure is submitted. Native disappearance
+   *       produces MenuClosedEvent; an already closed/closing menu returns false.
+   *       Closing a visible submenu closes its native popup hierarchy.
    * @return true if the menu was successfully closed, false otherwise
    */
   bool Close();

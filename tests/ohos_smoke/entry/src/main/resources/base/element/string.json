@@ -1,0 +1,8 @@
+{
+  "string": [
+    {
+      "name": "paste_reason",
+      "value": "Verify native clipboard reads in this disposable test emulator."
+    }
+  ]
+}

@@ -129,6 +129,13 @@ enum class Brightness {
  *
  * @note This class is thread-safe for singleton access, but individual operations
  *       may require additional synchronization depending on the platform implementation.
+ * @note OpenHarmony hosts initialize the ArkTS UI environment, attach their owning
+ * UIAbilityContext and forward actual onCreate/onForeground/onBackground/onDestroy
+ * callbacks through the platform-internal application bridge. One owning UIAbility
+ * is tracked per linked core/UI environment; this does not manage other Abilities
+ * or forcibly kill the application's processes. Subscribe before onCreate to
+ * observe ApplicationStartedEvent. State queries and appearance calls marshal
+ * worker calls to the initialized UI environment.
  */
 class Application : public EventEmitter<ApplicationEvent> {
  public:
@@ -168,6 +175,8 @@ class Application : public EventEmitter<ApplicationEvent> {
    * between different managers.
    *
    * @return The exit code passed to Quit()
+   * @note OpenHarmony's UIAbility owns the event loop. This method returns -1
+   * without starting a nested loop; use the host lifecycle bridge instead.
    *
    * @code
    * auto& app = Application::GetInstance();
@@ -185,6 +194,8 @@ class Application : public EventEmitter<ApplicationEvent> {
    *
    * @param window The window to run the application with
    * @return The exit code passed to Quit(), or -1 when @p window is null
+   * @note On OpenHarmony the host owns the event loop: always returns -1,
+   * without changing the primary window or starting another loop.
    *
    * @code
    * auto& app = Application::GetInstance();
@@ -235,7 +246,10 @@ class Application : public EventEmitter<ApplicationEvent> {
    * - Linux: Supported - cancelable Quit(), then the native loop stops
    * - Android: Not applicable - ignored; the Activity owns its lifecycle
    * - iOS: Not applicable - ignored; UIApplication owns its lifecycle
-   * - OpenHarmony: Not applicable - ignored; the Ability owns its lifecycle
+   * - OpenHarmony: Supported - cancelable programmatic Quit(), then public
+   *   UIAbilityContext.terminateSelf() for the attached owning Ability. Actual
+   *   onDestroy emits ApplicationExitingEvent; the requested code is event data,
+   *   not a process exit status. Required host destruction cannot be vetoed.
    *
    * @code
    * auto& app = Application::GetInstance();
@@ -248,6 +262,9 @@ class Application : public EventEmitter<ApplicationEvent> {
    * @brief Check if the application is currently running
    *
    * @return true if the application is running, false otherwise
+   * @note OpenHarmony reports the attached owning UIAbility's actual creation /
+   * destruction state. Before lifecycle attachment or after environment cleanup
+   * it returns false; a background Ability remains running.
    */
   bool IsRunning() const;
 
@@ -255,6 +272,9 @@ class Application : public EventEmitter<ApplicationEvent> {
    * @brief Check if this is a single instance application
    *
    * @return true if only one instance is allowed, false otherwise
+   * @note OpenHarmony reads ApplicationInfo.multiAppMode from the actual owning
+   * context. Multi-instance/clone modes, missing context or failed queries return
+   * false. A singleton Ability launch type alone is not treated as proof.
    */
   bool IsSingleInstance() const;
 
@@ -298,7 +318,15 @@ class Application : public EventEmitter<ApplicationEvent> {
    *   false. Hide the windows with Window::Hide().
    * - Android: ❌ Not applicable - Always returns false
    * - iOS: ❌ Not applicable - Always returns false
-   * - OpenHarmony: ❌ Not applicable - Always returns false
+   * - OpenHarmony: ⚠️ The attached owning UIAbility uses public showAbility /
+   *   hideAbility on a desktop with the status-bar capability. Add the application
+   *   to the status bar first. The system hides/restores the Ability's window group;
+   *   no per-window hide loop is substituted. The SDK removes the running Dock
+   *   item while hidden; restore through Show, a status-icon action or a normal
+   *   launcher activation. UI calls return submission status;
+   *   workers wait for the SDK result. Pending requests, absent lifecycle/context,
+   *   phone profiles, synchronous SDK errors and rejected worker requests return
+   *   false. Actual visibility changes update IsVisible and activation events.
    */
   bool Hide();
 
@@ -312,6 +340,11 @@ class Application : public EventEmitter<ApplicationEvent> {
    * @return false while the application is hidden; always true where the
    *         platform has no application-level hiding
    *
+   * @note OpenHarmony combines owning-Ability foreground/background state with
+   * actual SDK application hiding. Native primary-window restoration (including
+   * an external launcher restore) clears that hidden state. An ordinary per-window Hide does
+   * not mark the application hidden. State changes precede activation events.
+   * Before lifecycle attachment or after destruction it returns false.
    * @see Hide() for platform availability.
    */
   bool IsVisible() const;
@@ -334,7 +367,13 @@ class Application : public EventEmitter<ApplicationEvent> {
    * - Linux: ✅ Supported - GTK's default icon for every window without its own.
    * - Android: ❌ Not supported - Always returns false
    * - iOS: ❌ Not supported - Always returns false; the icon comes from Info.plist
-   * - OpenHarmony: ❌ Not supported - Always returns false
+   * - OpenHarmony: ⚠️ Desktop UIAbilityContext.setMissionWindowIcon updates the
+   *   owning Ability's window, mission card and shortcut-bar snapshot icon. It
+   *   does not change the installed launcher icon or another Ability's icon.
+   *   Requires an initialized owning context and loaded main window. Images must
+   *   be square, decodable and at most 128 MB as RGBA. Invalid paths/images and
+   *   phone profiles return false. UI calls report submission; workers wait for
+   *   SDK success. The original Image data is isolated from SDK ownership.
    */
   bool SetIcon(const std::string& icon_path);
 
@@ -389,7 +428,13 @@ class Application : public EventEmitter<ApplicationEvent> {
    *   desktops honor it.
    * - Android: ❌ Not applicable - Always returns false
    * - iOS: ❌ Not applicable - Always returns false
-   * - OpenHarmony: ❌ Not applicable - Always returns false
+   * - OpenHarmony: ⚠️ Public notificationManager.setBadgeNumber updates this
+   *   application's numeric launcher badge. Accepts nonnegative ASCII decimal
+   *   counts through INT32_MAX and the label "99+" (count 100). Empty or "0"
+   *   clears the badge; counts above 99 render as "99+". Other text returns false.
+   *   UI calls report submission; workers wait for SDK success. Notification /
+   *   badge settings control actual display. No notification is published and
+   *   notification authorization is not requested automatically.
    */
   bool SetBadgeLabel(const std::string& label);
 
@@ -411,7 +456,10 @@ class Application : public EventEmitter<ApplicationEvent> {
    *   variant of that theme is selected. Brightness::System restores both.
    * - Android: ❌ Not applicable - Always returns false
    * - iOS: ❌ Not applicable - Always returns false
-   * - OpenHarmony: ❌ Not applicable - Always returns false
+   * - OpenHarmony: ✅ ApplicationContext.setColorMode() updates application
+   *   resources. System restores the system mode. Requires the owning Ability's
+   *   window/content to be loaded; a UIAbility-specific override takes precedence.
+   *   Invalid values, missing initialized context or SDK exceptions return false.
    */
   bool SetBrightness(Brightness brightness);
 
@@ -432,6 +480,9 @@ class Application : public EventEmitter<ApplicationEvent> {
    * Returns the main window of the application, if one exists.
    *
    * @return Shared pointer to the primary window, or nullptr if none exists
+   * @note OpenHarmony initially discovers the attached stage's main window.
+   * An explicit selection overrides it. A cleared or destroyed selection returns
+   * nullptr; destruction of the owning Ability clears this primary selection.
    */
   std::shared_ptr<Window> GetPrimaryWindow() const;
 
@@ -443,6 +494,9 @@ class Application : public EventEmitter<ApplicationEvent> {
    * the platform.
    *
    * @param window Shared pointer to the window to set as primary
+   * @note On OpenHarmony nullptr explicitly clears selection; invalid native
+   * wrappers are ignored. This changes application selection, not WindowStage
+   * ownership or the system window type.
    */
   void SetPrimaryWindow(std::shared_ptr<Window> window);
 

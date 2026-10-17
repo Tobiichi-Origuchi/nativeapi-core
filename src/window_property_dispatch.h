@@ -15,6 +15,12 @@ struct WindowPropertyDispatch {
   // reading of a native window only records the values. Ignored while a
   // WindowPropertyScope is open on this thread: that scope refreshes at its end.
   static void Refresh(const Window& window);
+  // A rendered SDK frame can change only the observed title-button layout.
+  // Avoid polling every unrelated window property once per frame.
+  static void RefreshControlButtons(const Window& window);
+  // Seed the first usable rendered control layout, which may become available
+  // after native window attachment but before observation starts.
+  static void PrimeControlButtons(const Window& window);
   // Re-reads Window::GetOcclusionState() and emits WindowOcclusionChangedEvent
   // when it differs from the last reading; the first reading only records it.
   static void RefreshOcclusion(const Window& window);

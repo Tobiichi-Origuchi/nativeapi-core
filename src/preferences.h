@@ -11,10 +11,16 @@ namespace nativeapi {
  * Similar to Web Storage's localStorage, this provides persistent storage
  * for non-sensitive application data. Data is stored in plain text.
  *
- * Platform implementations:
- * - Windows: Registry (HKEY_CURRENT_USER) or INI files
- * - macOS: NSUserDefaults
- * - Linux: Configuration files (XDG Base Directory)
+ * @note Platform availability:
+ * - macOS: ✅ NSUserDefaults
+ * - Windows: ✅ Registry (HKEY_CURRENT_USER) or INI files
+ * - Linux: ✅ Configuration files (XDG Base Directory)
+ * - Android: ❌ Not implemented - Mutations fail and getters return defaults
+ * - iOS: ❌ Not implemented - Mutations fail and getters return defaults
+ * - OHOS: NDK Preferences in the application sandbox (API 23+); writes,
+ *   removals and clearing flush before returning. Instances with the same exact
+ *   scope share a synchronized SDK store until the final nativeapi owner closes.
+ *   SDK key/value/filename limits apply; embedded NUL keys/values are rejected.
  *
  * @warning Do not store sensitive data (passwords, tokens) here.
  *          Use SecureStorage for sensitive data.
@@ -24,7 +30,7 @@ class Preferences : public Storage {
   /**
    * @brief Create preferences storage with default scope.
    *
-   * Uses application name as scope if available.
+   * Uses the fixed scope "default" on every platform.
    */
   Preferences();
 

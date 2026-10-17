@@ -1,0 +1,8 @@
+{
+  "string": [
+    {
+      "name": "paste_reason",
+      "value": "Verify clipboard interoperability between isolated test apps"
+    }
+  ]
+}
